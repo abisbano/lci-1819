@@ -51,7 +51,7 @@
      PRINT = 267,
      BOOL_TYPE = 268,
      INT_TYPE = 269,
-     ID = 270,
+     IDE = 270,
      VAL = 271,
      IF_ALONE = 272
    };
@@ -69,7 +69,7 @@
 #define PRINT 267
 #define BOOL_TYPE 268
 #define INT_TYPE 269
-#define ID 270
+#define IDE 270
 #define VAL 271
 #define IF_ALONE 272
 

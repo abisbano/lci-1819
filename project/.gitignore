@@ -1,3 +1,6 @@
 # Generated files
 parser.c
 runtime.bc
+
+# Object files
+*.o

@@ -10,13 +10,13 @@ Grammar
     4 decls: decls decl
     5      | /* empty */
 
-    6 decl: type ID ';'
+    6 decl: type IDE ';'
 
     7 stmts: stmts stmt
     8      | stmt
 
     9 stmt: '{' stmts '}'
-   10     | ID '=' expr ';'
+   10     | IDE '=' expr ';'
    11     | IF '(' expr ')' stmt
    12     | IF '(' expr ')' stmt ELSE stmt
    13     | WHILE '(' expr ')' stmt
@@ -25,7 +25,7 @@ Grammar
    15 expr: VAL
    16     | FALSE
    17     | TRUE
-   18     | ID
+   18     | IDE
    19     | '(' expr ')'
    20     | expr '+' expr
    21     | expr '-' expr
@@ -67,7 +67,7 @@ WHILE (266) 13
 PRINT (267) 14
 BOOL_TYPE (268) 2
 INT_TYPE (269) 3
-ID (270) 6 10 18
+IDE (270) 6 10 18
 VAL (271) 15
 IF_ALONE (272)
 
@@ -120,7 +120,7 @@ state 2
     PRINT      shift, and go to state 6
     BOOL_TYPE  shift, and go to state 7
     INT_TYPE   shift, and go to state 8
-    ID         shift, and go to state 9
+    IDE        shift, and go to state 9
     '{'        shift, and go to state 10
 
     type  go to state 11
@@ -156,7 +156,7 @@ state 6
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -179,7 +179,7 @@ state 8
 
 state 9
 
-   10 stmt: ID . '=' expr ';'
+   10 stmt: IDE . '=' expr ';'
 
     '='  shift, and go to state 22
 
@@ -191,7 +191,7 @@ state 10
     IF     shift, and go to state 4
     WHILE  shift, and go to state 5
     PRINT  shift, and go to state 6
-    ID     shift, and go to state 9
+    IDE    shift, and go to state 9
     '{'    shift, and go to state 10
 
     stmts  go to state 23
@@ -200,9 +200,9 @@ state 10
 
 state 11
 
-    6 decl: type . ID ';'
+    6 decl: type . IDE ';'
 
-    ID  shift, and go to state 25
+    IDE  shift, and go to state 25
 
 
 state 12
@@ -226,7 +226,7 @@ state 14
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -239,7 +239,7 @@ state 15
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -262,7 +262,7 @@ state 17
 
 state 18
 
-   18 expr: ID .
+   18 expr: IDE .
 
     $default  reduce using rule 18 (expr)
 
@@ -280,7 +280,7 @@ state 20
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -316,11 +316,11 @@ state 21
 
 state 22
 
-   10 stmt: ID '=' . expr ';'
+   10 stmt: IDE '=' . expr ';'
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -335,7 +335,7 @@ state 23
     IF     shift, and go to state 4
     WHILE  shift, and go to state 5
     PRINT  shift, and go to state 6
-    ID     shift, and go to state 9
+    IDE    shift, and go to state 9
     '{'    shift, and go to state 10
     '}'    shift, and go to state 41
 
@@ -351,7 +351,7 @@ state 24
 
 state 25
 
-    6 decl: type ID . ';'
+    6 decl: type IDE . ';'
 
     ';'  shift, and go to state 43
 
@@ -444,7 +444,7 @@ state 29
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -457,7 +457,7 @@ state 30
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -470,7 +470,7 @@ state 31
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -483,7 +483,7 @@ state 32
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -496,7 +496,7 @@ state 33
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -509,7 +509,7 @@ state 34
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -522,7 +522,7 @@ state 35
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -535,7 +535,7 @@ state 36
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -548,7 +548,7 @@ state 37
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -561,7 +561,7 @@ state 38
 
     FALSE  shift, and go to state 16
     TRUE   shift, and go to state 17
-    ID     shift, and go to state 18
+    IDE    shift, and go to state 18
     VAL    shift, and go to state 19
     '('    shift, and go to state 20
 
@@ -577,7 +577,7 @@ state 39
 
 state 40
 
-   10 stmt: ID '=' expr . ';'
+   10 stmt: IDE '=' expr . ';'
    20 expr: expr . '+' expr
    21     | expr . '-' expr
    22     | expr . '*' expr
@@ -618,7 +618,7 @@ state 42
 
 state 43
 
-    6 decl: type ID ';' .
+    6 decl: type IDE ';' .
 
     $default  reduce using rule 6 (decl)
 
@@ -631,7 +631,7 @@ state 44
     IF     shift, and go to state 4
     WHILE  shift, and go to state 5
     PRINT  shift, and go to state 6
-    ID     shift, and go to state 9
+    IDE    shift, and go to state 9
     '{'    shift, and go to state 10
 
     stmt  go to state 58
@@ -644,7 +644,7 @@ state 45
     IF     shift, and go to state 4
     WHILE  shift, and go to state 5
     PRINT  shift, and go to state 6
-    ID     shift, and go to state 9
+    IDE    shift, and go to state 9
     '{'    shift, and go to state 10
 
     stmt  go to state 59
@@ -865,7 +865,7 @@ state 56
 
 state 57
 
-   10 stmt: ID '=' expr ';' .
+   10 stmt: IDE '=' expr ';' .
 
     $default  reduce using rule 10 (stmt)
 
@@ -894,7 +894,7 @@ state 60
     IF     shift, and go to state 4
     WHILE  shift, and go to state 5
     PRINT  shift, and go to state 6
-    ID     shift, and go to state 9
+    IDE    shift, and go to state 9
     '{'    shift, and go to state 10
 
     stmt  go to state 61

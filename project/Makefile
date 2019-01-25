@@ -23,7 +23,7 @@ compiler: ${OBJECTS}
 	$(CXX) -o $@ $^ $(LLVM_LINK_FLAGS) $(CXXFLAGS) -rdynamic
 
 runtime.bc: runtime.c
-	clang -c -emit-llvm $^
+	cc -c -emit-llvm $^
 
 clean: 
 	rm -rf compiler runtime.bc ${OBJECTS} ${LEX_OBJECTS} ${YACC_OBJECTS}

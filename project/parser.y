@@ -38,7 +38,7 @@
 %token FALSE TRUE
 %token IF ELSE WHILE PRINT
 %token BOOL_TYPE INT_TYPE
-%token <id> ID
+%token <id> IDE
 %token <value> VAL
 %type  <expr>  expr
 %type  <stmt>  stmt
@@ -69,7 +69,7 @@ type: BOOL_TYPE   { $$ = BOOLEAN; }
       | INT_TYPE  { $$ = INTEGER; }
 
 decls: decls decl | ;
-decl: type ID ';'     {
+decl: type IDE ';'     {
                         if (vector_get(&global_types, $2)) {
                           printf("Multiple declarations for identifier %s\n", string_int_rev(&global_ids, $2));
                           exit(0);
@@ -84,7 +84,7 @@ stmts: stmts stmt     { $$ = make_seq($1, $2); }
       | stmt          { $$ = $1; };
 
 stmt: '{' stmts '}'                         { $$ = $2; }
-      | ID '=' expr ';'                     { $$ = make_assign($1, $3); }
+      | IDE '=' expr ';'                    { $$ = make_assign($1, $3); }
       | IF '(' expr ')' stmt %prec IF_ALONE { $$ = make_if($3, $5); }
       | IF '(' expr ')' stmt ELSE stmt      { $$ = make_ifelse($3, $5, $7); }
       | WHILE '(' expr ')' stmt             { $$ = make_while($3, $5); }
@@ -93,7 +93,7 @@ stmt: '{' stmts '}'                         { $$ = $2; }
 expr: VAL             { $$ = literal($1); }
       | FALSE         { $$ = bool_lit(0); }
       | TRUE          { $$ = bool_lit(1); }
-      | ID            { $$ = variable($1); }
+      | IDE           { $$ = variable($1); }
       | '(' expr ')'  { $$ = $2; }
 
       | expr '+' expr { $$ = binop($1, '+', $3); }

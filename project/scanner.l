@@ -8,7 +8,7 @@
 %}
 
 DIGIT    [0-9]
-ID       [A-Za-z][A-Za-z0-9]*
+IDE       [A-Za-z][A-Za-z0-9]*
 
 %option noyywrap
 %%
@@ -22,7 +22,7 @@ bool               { return BOOL_TYPE; }
 true               { return TRUE; }
 false              { return FALSE; }
 {DIGIT}+           { yylval.value = atoi(yytext); return VAL; }
-{ID}               { yylval.id = string_int_get(&global_ids, yytext); return ID; }
+{IDE}               { yylval.id = string_int_get(&global_ids, yytext); return IDE; }
 [ \t\r\n]+         /* discard whitespace */
 [-*/+><=;\{\}\(\)] { return *yytext; }
 \>=                { return GE; }
