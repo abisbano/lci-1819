@@ -1,6 +1,9 @@
 # Generated files
+compiler
 parser.c
 runtime.bc
+y.output
+y.tab.h
 
 # Object files
 *.o
