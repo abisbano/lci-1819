@@ -67,12 +67,28 @@ type: BOOL_TYPE   { $$ = make_decl_type(BOOLEAN, 1); }
 
 decls: decls decl | ;
 decl: type IDE ';'     {
-                        print_decl_type($1);
                         if (vector_get(&global_types, $2)) {
                           printf("Multiple declarations for identifier %s\n", string_int_rev(&global_ids, $2));
                           exit(0);
                         } else {
-                          LLVMTypeRef t = $1->type == BOOLEAN ? LLVMInt1Type() : LLVMInt32Type();
+                          LLVMTypeRef t;
+                          switch ($1->type) {
+                          case BOOLEAN:
+                            t = LLVMInt1Type();
+                            break;
+                          case INTEGER:
+                            t = LLVMInt32Type();
+                            break;
+                          case BOOL_ARRAY:
+                            t = LLVMArrayType(LLVMInt1Type(), $1->size);
+                            break;
+                          case INT_ARRAY:
+                            t = LLVMArrayType(LLVMInt32Type(), $1->size);
+                            break;
+                          default:
+                            // unreachable
+                            t = LLVMInt32Type();
+                          }
                           LLVMValueRef p = LLVMBuildAlloca(builder, t, string_int_rev(&global_ids, $2));
                           vector_set(&global_types, $2, p);
                         }
