@@ -3,6 +3,15 @@
 
 #include "y.tab.h"
 
+enum value_type {
+  ERROR = -1,
+  UNTYPED = 0,
+  INTEGER = 1,
+  BOOLEAN = 2,
+  INT_ARRAY = 3,
+  BOOL_ARRAY = 4,
+};
+
 const char *type_name(enum value_type t);
 
 enum expr_type {
@@ -82,3 +91,12 @@ int valid_stmt(struct stmt *stmt);
 
 LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRef builder);
 void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builder);
+
+struct decl_type {
+  enum value_type type;
+  int size;
+};
+
+struct decl_type* make_decl_type(enum value_type t, int s);
+void print_decl_type(struct decl_type *decl);
+void free_decl_type(struct decl_type *decl);

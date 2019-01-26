@@ -25,12 +25,7 @@
   int value;
   size_t id;
   struct expr *expr;
-  enum value_type {
-    ERROR = -1,
-    UNTYPED = 0,
-    INTEGER = 1,
-    BOOLEAN = 2,
-  } type;
+  struct decl_type *type;
   struct stmt *stmt;
 }
 
@@ -65,16 +60,19 @@ program: decls stmt {
                       free_stmt($2);
                     }
 
-type: BOOL_TYPE   { $$ = BOOLEAN; }
-      | INT_TYPE  { $$ = INTEGER; }
+type: BOOL_TYPE   { $$ = make_decl_type(BOOLEAN, 1); }
+      | INT_TYPE  { $$ = make_decl_type(INTEGER, 1); }
+      | BOOL_TYPE '[' VAL ']' { $$ = make_decl_type(BOOL_ARRAY, $3); }
+      | INT_TYPE '[' VAL ']' { $$ = make_decl_type(INT_ARRAY, $3); }
 
 decls: decls decl | ;
 decl: type IDE ';'     {
+                        print_decl_type($1);
                         if (vector_get(&global_types, $2)) {
                           printf("Multiple declarations for identifier %s\n", string_int_rev(&global_ids, $2));
                           exit(0);
                         } else {
-                          LLVMTypeRef t = $1 == BOOLEAN ? LLVMInt1Type() : LLVMInt32Type();
+                          LLVMTypeRef t = $1->type == BOOLEAN ? LLVMInt1Type() : LLVMInt32Type();
                           LLVMValueRef p = LLVMBuildAlloca(builder, t, string_int_rev(&global_ids, $2));
                           vector_set(&global_types, $2, p);
                         }

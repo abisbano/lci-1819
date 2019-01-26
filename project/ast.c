@@ -472,3 +472,34 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     }
   }
 }
+
+struct decl_type* make_decl_type(enum value_type t, int s) {
+  struct decl_type* d = malloc(sizeof(struct decl_type));
+  d->type = t;
+  d->size = s;
+  return d;
+}
+
+void print_decl_type(struct decl_type *decl) {
+  // TODO: maybe we need a method to print the name of the decl and semicolon?
+  switch(decl->type) {
+  case INTEGER:
+    printf("int");
+    break;
+  case BOOLEAN:
+    printf("bool");
+    break;
+  case INT_ARRAY:
+    printf("int[%i]", decl->size);
+    break;
+  case BOOL_ARRAY:
+    printf("bool[%i]", decl->size);
+    break;
+  default:
+    printf("NaT");
+  }
+}
+
+void free_decl_type(struct decl_type *decl) {
+  free(decl);
+}
