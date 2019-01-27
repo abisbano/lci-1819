@@ -64,6 +64,7 @@ struct expr* enqueue(struct expr *arr, struct expr *el) {
   struct expr* e = encapsulate(el);
   arr->array.last->array_elem.next = e;
   arr->array.last = e;
+  ++arr->array.length;
   return arr;
 }
 
@@ -322,7 +323,16 @@ void free_expr(struct expr *expr) {
       free_expr(expr->binop.rhs);
       free(expr);
       break;
-  default: break;
+    case ARRAY:
+      free_expr(expr->array.first);
+      free(expr);
+      break;
+    case ARRAY_ELEM:
+      free_expr(expr->array_elem.elem);
+      if (expr->array_elem.next)
+        free_expr(expr->array_elem.next);
+      free(expr);
+      break;
   }
 }
 
