@@ -44,6 +44,38 @@ struct expr* binop(struct expr *lhs, int op, struct expr *rhs) {
   return r;
 }
 
+struct expr* array(struct expr *fst) {
+  struct expr* e = encapsulate(fst);
+  if (!e) {
+    // TODO: error!
+  }
+  struct expr* r = malloc(sizeof(struct expr));
+  r->type = ARRAY;
+  r->array.length = 1;
+  r->array.first = e;
+  r->array.last = e;
+  return r;
+}
+
+struct expr* enqueue(struct expr *arr, struct expr *el) {
+  if (arr->type != ARRAY) {
+    return 0;
+  }
+  struct expr* e = encapsulate(el);
+  arr->array.last->array_elem.next = e;
+  arr->array.last = e;
+  return arr;
+}
+
+struct expr* encapsulate(struct expr *e) {
+  // TODO: check that e is not an ARRAY or an ARRAY_ELEM or a BINOP3
+  struct expr* r = malloc(sizeof(struct expr));
+  r->type = ARRAY_ELEM;
+  r->array_elem.elem = e;
+  r->array_elem.next = 0;
+  return r;
+}
+
 void print_expr(struct expr *expr) {
   switch (expr->type) {
     case BOOL_LIT:
@@ -70,6 +102,21 @@ void print_expr(struct expr *expr) {
       }
       print_expr(expr->binop.rhs);
       printf(")");
+      break;
+
+    case ARRAY:
+      printf("[");
+      print_expr(expr->array.first);
+      for (struct expr* next = expr->array.first->array_elem.next;
+           next; next = next->array_elem.next) {
+        printf(", ");
+        print_expr(next->array_elem.elem);
+      }
+      printf("]");
+      break;
+
+    case ARRAY_ELEM:
+      print_expr(expr->array_elem.elem);
       break;
   }
 }
@@ -160,6 +207,8 @@ void emit_stack_machine(struct expr *expr) {
         case '<': printf("lt\n"); break;
       }
       break;
+  default: break;
+    // TODO: to avoid warning
   }
 }
 
@@ -203,6 +252,8 @@ int emit_reg_machine(struct expr *expr) {
       }
       break;
     }
+  default: break;
+    // TODO: to avoid warning
   }
   return result_reg;
 }
@@ -271,6 +322,7 @@ void free_expr(struct expr *expr) {
       free_expr(expr->binop.rhs);
       free(expr);
       break;
+  default: break;
   }
 }
 
@@ -402,6 +454,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
         case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
       }
     }
+  default: break;
   }
   return NULL;
 }

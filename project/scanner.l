@@ -24,7 +24,7 @@ false              { return FALSE; }
 {DIGIT}+           { yylval.value = atoi(yytext); return VAL; }
 {IDE}               { yylval.id = string_int_get(&global_ids, yytext); return IDE; }
 [ \t\r\n]+         /* discard whitespace */
-[-*/+><=;\{\}\(\)\[\]] { return *yytext; }
+[-*/+><=,;\{\}\(\)\[\]] { return *yytext; }
 \>=                { return GE; }
 \<=                { return LE; }
 ==                 { return EQ; }

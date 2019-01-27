@@ -39,6 +39,8 @@
 %type  <stmt>  stmt
 %type  <stmt>  stmts
 %type  <type>  type
+%type  <expr>  elems
+%type  <expr>  elem
 
 %nonassoc IF_ALONE
 %nonassoc ELSE
@@ -109,6 +111,7 @@ expr: VAL             { $$ = literal($1); }
       | TRUE          { $$ = bool_lit(1); }
       | IDE           { $$ = variable($1); }
       | '(' expr ')'  { $$ = $2; }
+| '[' elems ']' { print_expr($2); $$ = $2; }
 
       | expr '+' expr { $$ = binop($1, '+', $3); }
       | expr '-' expr { $$ = binop($1, '-', $3); }
@@ -124,6 +127,14 @@ expr: VAL             { $$ = literal($1); }
       | expr '<' expr { $$ = binop($1, '<', $3); }
 
       ;
+
+elems: elems ',' elem { $$ = enqueue($1, $3); }
+      | elem          { $$ = array($1); }
+
+elem: VAL             { $$ = literal($1); }
+      | FALSE         { $$ = bool_lit(0); }
+      | TRUE          { $$ = bool_lit(1); }
+      | IDE           { $$ = variable($1); }
 
 %%
 

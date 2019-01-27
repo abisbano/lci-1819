@@ -19,6 +19,8 @@ enum expr_type {
   LITERAL,
   VARIABLE,
   BIN_OP,
+  ARRAY,
+  ARRAY_ELEM,
 };
 
 struct expr {
@@ -31,6 +33,15 @@ struct expr {
       struct expr *rhs;
       int op;
     } binop; // for type == BIN_OP
+    struct {
+      int length;
+      struct expr *first;
+      struct expr *last;
+    } array; // for type == ARRAY
+    struct {
+      struct expr *elem;
+      struct expr *next;
+    } array_elem; // for type == ARRAY_ELEM
   };
 };
 
@@ -38,6 +49,9 @@ struct expr* bool_lit(int v);
 struct expr* literal(int v);
 struct expr* variable(size_t id);
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
+struct expr* array(struct expr *fst);
+struct expr* enqueue(struct expr *arr, struct expr *el);
+struct expr* encapsulate(struct expr *e);
 
 void print_expr(struct expr *expr);
 void emit_stack_machine(struct expr *expr);
@@ -100,3 +114,5 @@ struct decl_type {
 struct decl_type* make_decl_type(enum value_type t, int s);
 void print_decl_type(struct decl_type *decl);
 void free_decl_type(struct decl_type *decl);
+
+
