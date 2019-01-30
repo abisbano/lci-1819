@@ -149,16 +149,9 @@ void print_stmt(struct stmt *stmt, int indent) {
 
     case STMT_ASSIGN:
       print_indent(indent);
-      printf("%s = ", string_int_rev(&global_ids, stmt->assign.id));
-      print_expr(stmt->assign.expr);
-      printf(";\n");
-      break;
-
-    case STMT_ASSIGN_ARR_ELEM:
-      print_indent(indent);
-      printf("%s[%i] = ", string_int_rev(&global_ids, stmt->assign_arr_elem.id),
-                                         stmt->assign_arr_elem.index);
-      print_expr(stmt->assign.expr);
+      print_expr(stmt->assign.lhs);
+      printf(" = ");
+      print_expr(stmt->assign.rhs);
       printf(";\n");
       break;
 
@@ -371,20 +364,11 @@ struct stmt* make_seq(struct stmt *fst, struct stmt *snd) {
   return r;
 }
 
-struct stmt* make_assign(size_t id, struct expr *e) {
+struct stmt* make_assign(struct expr *lhs, struct expr *rhs) {
   struct stmt* r = malloc(sizeof(struct stmt));
   r->type = STMT_ASSIGN;
-  r->assign.id = id;
-  r->assign.expr = e;
-  return r;
-}
-
-struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e) {
-  struct stmt* r = malloc(sizeof(struct stmt));
-  r->type = STMT_ASSIGN_ARR_ELEM;
-  r->assign_arr_elem.id = id;
-  r->assign_arr_elem.index = index;
-  r->assign_arr_elem.expr = e;
+  r->assign.lhs = lhs;
+  r->assign.rhs = rhs;
   return r;
 }
 
@@ -424,11 +408,8 @@ void free_stmt(struct stmt *stmt) {
       break;
 
     case STMT_ASSIGN:
-      free_expr(stmt->assign.expr);
-      break;
-
-    case STMT_ASSIGN_ARR_ELEM:
-      free_expr(stmt->assign_arr_elem.expr);
+      free_expr(stmt->assign.lhs);
+      free_expr(stmt->assign.rhs);
       break;
 
     case STMT_PRINT:
@@ -459,12 +440,8 @@ int valid_stmt(struct stmt *stmt) {
     case STMT_ASSIGN:
       // should the language/compiler forbid accessing uninitialized variables?
       // maybe also warn about dead assignments?
-      return check_types(stmt->assign.expr) != ERROR;
-
-    case STMT_ASSIGN_ARR_ELEM:
-      // should the language/compiler forbid accessing uninitialized variables?
-      // maybe also warn about dead assignments?
-      return check_types(stmt->assign_arr_elem.expr) != ERROR;
+      // TODO: implement a better check on types
+      return check_types(stmt->assign.lhs) && check_types(stmt->assign.rhs);
 
     case STMT_PRINT:
       return check_types(stmt->print.expr) != ERROR;
@@ -529,17 +506,16 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     }
 
     case STMT_ASSIGN: {
-      LLVMValueRef expr = codegen_expr(stmt->assign.expr, module, builder);
-      LLVMBuildStore(builder, expr, vector_get(&global_types, stmt->assign.id));
-      break;
-    }
-
-    case STMT_ASSIGN_ARR_ELEM: {
-      LLVMValueRef expr = codegen_expr(stmt->assign_arr_elem.expr, module, builder);
-      LLVMValueRef val = LLVMBuildStructGEP(builder,
-                                            vector_get(&global_types, stmt->assign_arr_elem.id),
-                                            stmt->assign_arr_elem.index, "ref");
-      LLVMBuildStore(builder, expr, val);
+      LLVMValueRef lhs;
+      LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
+      if (stmt->assign.lhs->type == VARIABLE) {
+        lhs = vector_get(&global_types, stmt->assign.lhs->id);
+      } else if (stmt->assign.lhs->type == ELEM) {
+        lhs = LLVMBuildStructGEP(builder,
+                                 vector_get(&global_types, stmt->assign.lhs->elem.id),
+                                 stmt->assign.lhs->elem.index, "ref");
+      }
+      LLVMBuildStore(builder, rhs, lhs);
       break;
     }
 

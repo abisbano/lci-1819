@@ -35,6 +35,7 @@
 %token BOOL_TYPE INT_TYPE
 %token <id> IDE
 %token <value> VAL
+%type  <expr> expr_lhs
 %type  <expr>  expr
 %type  <stmt>  stmt
 %type  <stmt>  stmts
@@ -104,12 +105,14 @@ stmts: stmts stmt     { $$ = make_seq($1, $2); }
       | stmt          { $$ = $1; };
 
 stmt: '{' stmts '}'                         { $$ = $2; }
-      | IDE '=' expr ';'                    { $$ = make_assign($1, $3); }
-      | IDE '[' VAL ']' '=' expr ';'        { $$ = make_assign_array_elem($1, $3, $6); }
+      | expr_lhs '=' expr ';'                    { $$ = make_assign($1, $3); }
       | IF '(' expr ')' stmt %prec IF_ALONE { $$ = make_if($3, $5); }
       | IF '(' expr ')' stmt ELSE stmt      { $$ = make_ifelse($3, $5, $7); }
       | WHILE '(' expr ')' stmt             { $$ = make_while($3, $5); }
       | PRINT expr ';'                      { $$ = make_print($2); }
+
+expr_lhs: IDE              { $$ = variable($1); }
+         | IDE '[' VAL ']' { $$ = elem_access($1, $3); }
 
 expr: VAL             { $$ = literal($1); }
       | FALSE         { $$ = bool_lit(0); }

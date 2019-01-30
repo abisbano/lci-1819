@@ -70,7 +70,7 @@ void free_expr(struct expr *expr);
 enum stmt_type {
   STMT_SEQ,
   STMT_ASSIGN,
-  STMT_ASSIGN_ARR_ELEM,
+  //  STMT_ASSIGN_ARR_ELEM,
   STMT_IF,
   STMT_WHILE,
   STMT_PRINT,
@@ -80,14 +80,9 @@ struct stmt {
   enum stmt_type type;
   union {
     struct {
-      size_t id;
-      struct expr *expr;
+      struct expr *lhs;
+      struct expr *rhs;
     } assign; // for type == STMT_ASSIGN
-    struct {
-      size_t id;
-      int index;
-      struct expr *expr;
-    } assign_arr_elem; // for type == STMT_ASSIGN_ARR_ELEM
     struct {
       struct stmt *fst, *snd;
     } seq; // for type == STMT_SEQ
@@ -106,7 +101,7 @@ struct stmt {
 };
 
 struct stmt* make_seq(struct stmt *fst, struct stmt *snd);
-struct stmt* make_assign(size_t id, struct expr *e);
+struct stmt* make_assign(struct expr *lhs, struct expr *rhs);
 struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e);
 struct stmt* make_while(struct expr *e, struct stmt *body);
 struct stmt* make_ifelse(struct expr *e, struct stmt *if_body, struct stmt *else_body);
