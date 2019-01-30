@@ -18,6 +18,7 @@ enum expr_type {
   BOOL_LIT,
   LITERAL,
   VARIABLE,
+  ELEM,
   BIN_OP,
   ARRAY,
   ARRAY_ELEM,
@@ -28,6 +29,10 @@ struct expr {
   union {
     int value; // for type == LITERAL || type == BOOL_LIT
     size_t id; // for type == VARIABLE
+    struct {
+      size_t id;
+      int index;
+    } elem;
     struct {
       struct expr *lhs;
       struct expr *rhs;
@@ -48,6 +53,7 @@ struct expr {
 struct expr* bool_lit(int v);
 struct expr* literal(int v);
 struct expr* variable(size_t id);
+struct expr* elem_access(size_t id, int index);
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
 struct expr* array(struct expr *fst);
 struct expr* enqueue(struct expr *arr, struct expr *el);
@@ -64,6 +70,7 @@ void free_expr(struct expr *expr);
 enum stmt_type {
   STMT_SEQ,
   STMT_ASSIGN,
+  STMT_ASSIGN_ARR_ELEM,
   STMT_IF,
   STMT_WHILE,
   STMT_PRINT,
@@ -76,6 +83,11 @@ struct stmt {
       size_t id;
       struct expr *expr;
     } assign; // for type == STMT_ASSIGN
+    struct {
+      size_t id;
+      int index;
+      struct expr *expr;
+    } assign_arr_elem; // for type == STMT_ASSIGN_ARR_ELEM
     struct {
       struct stmt *fst, *snd;
     } seq; // for type == STMT_SEQ
@@ -95,6 +107,7 @@ struct stmt {
 
 struct stmt* make_seq(struct stmt *fst, struct stmt *snd);
 struct stmt* make_assign(size_t id, struct expr *e);
+struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e);
 struct stmt* make_while(struct expr *e, struct stmt *body);
 struct stmt* make_ifelse(struct expr *e, struct stmt *if_body, struct stmt *else_body);
 struct stmt* make_if(struct expr *e, struct stmt *body);

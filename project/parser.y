@@ -39,8 +39,8 @@
 %type  <stmt>  stmt
 %type  <stmt>  stmts
 %type  <type>  type
-%type  <expr>  elems
-%type  <expr>  elem
+ //%type  <expr>  elems
+ //%type  <expr>  elem
 
 %nonassoc IF_ALONE
 %nonassoc ELSE
@@ -74,24 +74,28 @@ decl: type IDE ';'     {
                           exit(0);
                         } else {
                           LLVMTypeRef t;
+                          LLVMValueRef p;
                           switch ($1->type) {
                           case BOOLEAN:
                             t = LLVMInt1Type();
+                            p = LLVMBuildAlloca(builder, t, string_int_rev(&global_ids, $2));
                             break;
                           case INTEGER:
                             t = LLVMInt32Type();
+                            p = LLVMBuildAlloca(builder, t, string_int_rev(&global_ids, $2));
                             break;
                           case BOOL_ARRAY:
                             t = LLVMArrayType(LLVMInt1Type(), $1->size);
+                            p = LLVMBuildArrayAlloca(builder, t, 0, string_int_rev(&global_ids, $2));
                             break;
                           case INT_ARRAY:
                             t = LLVMArrayType(LLVMInt32Type(), $1->size);
+                            p = LLVMBuildArrayAlloca(builder, t, 0, string_int_rev(&global_ids, $2));
                             break;
                           default:
                             // unreachable
                             t = LLVMInt32Type();
                           }
-                          LLVMValueRef p = LLVMBuildAlloca(builder, t, string_int_rev(&global_ids, $2));
                           vector_set(&global_types, $2, p);
                         }
                       }
@@ -101,6 +105,7 @@ stmts: stmts stmt     { $$ = make_seq($1, $2); }
 
 stmt: '{' stmts '}'                         { $$ = $2; }
       | IDE '=' expr ';'                    { $$ = make_assign($1, $3); }
+      | IDE '[' VAL ']' '=' expr ';'        { $$ = make_assign_array_elem($1, $3, $6); }
       | IF '(' expr ')' stmt %prec IF_ALONE { $$ = make_if($3, $5); }
       | IF '(' expr ')' stmt ELSE stmt      { $$ = make_ifelse($3, $5, $7); }
       | WHILE '(' expr ')' stmt             { $$ = make_while($3, $5); }
@@ -110,8 +115,9 @@ expr: VAL             { $$ = literal($1); }
       | FALSE         { $$ = bool_lit(0); }
       | TRUE          { $$ = bool_lit(1); }
       | IDE           { $$ = variable($1); }
+      | IDE '[' VAL ']' { $$ = elem_access($1,$3); }
       | '(' expr ')'  { $$ = $2; }
-| '[' elems ']' { print_expr($2); $$ = $2; }
+//| '[' elems ']' { print_expr($2); $$ = $2; }
 
       | expr '+' expr { $$ = binop($1, '+', $3); }
       | expr '-' expr { $$ = binop($1, '-', $3); }
@@ -128,13 +134,13 @@ expr: VAL             { $$ = literal($1); }
 
       ;
 
-elems: elems ',' elem { $$ = enqueue($1, $3); }
-      | elem          { $$ = array($1); }
+//elems: elems ',' elem { $$ = enqueue($1, $3); }
+//      | elem          { $$ = array($1); }
 
-elem: VAL             { $$ = literal($1); }
-      | FALSE         { $$ = bool_lit(0); }
-      | TRUE          { $$ = bool_lit(1); }
-      | IDE           { $$ = variable($1); }
+//elem: VAL             { $$ = literal($1); }
+//      | FALSE         { $$ = bool_lit(0); }
+//      | TRUE          { $$ = bool_lit(1); }
+//      | IDE           { $$ = variable($1); }
 
 %%
 

@@ -35,6 +35,14 @@ struct expr* variable(size_t id) {
   return r;
 }
 
+struct expr* elem_access(size_t id, int index) {
+  struct expr* r = malloc(sizeof(struct expr));
+  r->type = ELEM;
+  r->elem.id = id;
+  r->elem.index = index;
+  return r;
+}
+
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs) {
   struct expr* r = malloc(sizeof(struct expr));
   r->type = BIN_OP;
@@ -91,6 +99,10 @@ void print_expr(struct expr *expr) {
       printf("%s", string_int_rev(&global_ids, expr->id));
       break;
 
+    case ELEM:
+      printf("%s[%i]", string_int_rev(&global_ids, expr->elem.id), expr->elem.index);
+      break;
+
     case BIN_OP:
       printf("(");
       print_expr(expr->binop.lhs);
@@ -138,6 +150,14 @@ void print_stmt(struct stmt *stmt, int indent) {
     case STMT_ASSIGN:
       print_indent(indent);
       printf("%s = ", string_int_rev(&global_ids, stmt->assign.id));
+      print_expr(stmt->assign.expr);
+      printf(";\n");
+      break;
+
+    case STMT_ASSIGN_ARR_ELEM:
+      print_indent(indent);
+      printf("%s[%i] = ", string_int_rev(&global_ids, stmt->assign_arr_elem.id),
+                                         stmt->assign_arr_elem.index);
       print_expr(stmt->assign.expr);
       printf(";\n");
       break;
@@ -273,6 +293,12 @@ enum value_type check_types(struct expr *expr) {
       return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
     }
 
+    case ELEM: {
+      LLVMValueRef ptr = vector_get(&global_types, expr->elem.id);
+      LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
+      return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
+    }
+
     case BIN_OP: {
       enum value_type lhs = check_types(expr->binop.lhs);
       enum value_type rhs = check_types(expr->binop.rhs);
@@ -315,6 +341,7 @@ void free_expr(struct expr *expr) {
     case BOOL_LIT:
     case LITERAL:
     case VARIABLE:
+    case ELEM:
       free(expr);
       break;
 
@@ -349,6 +376,15 @@ struct stmt* make_assign(size_t id, struct expr *e) {
   r->type = STMT_ASSIGN;
   r->assign.id = id;
   r->assign.expr = e;
+  return r;
+}
+
+struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e) {
+  struct stmt* r = malloc(sizeof(struct stmt));
+  r->type = STMT_ASSIGN_ARR_ELEM;
+  r->assign_arr_elem.id = id;
+  r->assign_arr_elem.index = index;
+  r->assign_arr_elem.expr = e;
   return r;
 }
 
@@ -391,6 +427,10 @@ void free_stmt(struct stmt *stmt) {
       free_expr(stmt->assign.expr);
       break;
 
+    case STMT_ASSIGN_ARR_ELEM:
+      free_expr(stmt->assign_arr_elem.expr);
+      break;
+
     case STMT_PRINT:
       free_expr(stmt->print.expr);
       break;
@@ -421,6 +461,11 @@ int valid_stmt(struct stmt *stmt) {
       // maybe also warn about dead assignments?
       return check_types(stmt->assign.expr) != ERROR;
 
+    case STMT_ASSIGN_ARR_ELEM:
+      // should the language/compiler forbid accessing uninitialized variables?
+      // maybe also warn about dead assignments?
+      return check_types(stmt->assign_arr_elem.expr) != ERROR;
+
     case STMT_PRINT:
       return check_types(stmt->print.expr) != ERROR;
 
@@ -445,6 +490,12 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
 
     case VARIABLE:
       return LLVMBuildLoad(builder, vector_get(&global_types, expr->id), "loadtmp");
+
+    case ELEM: {
+      LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
+                                            expr->elem.index, "ptrtmp");
+      return LLVMBuildLoad(builder, ptr, "loadtmp");
+    }
 
     case BIN_OP: {
       LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder);
@@ -480,6 +531,15 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     case STMT_ASSIGN: {
       LLVMValueRef expr = codegen_expr(stmt->assign.expr, module, builder);
       LLVMBuildStore(builder, expr, vector_get(&global_types, stmt->assign.id));
+      break;
+    }
+
+    case STMT_ASSIGN_ARR_ELEM: {
+      LLVMValueRef expr = codegen_expr(stmt->assign_arr_elem.expr, module, builder);
+      LLVMValueRef val = LLVMBuildStructGEP(builder,
+                                            vector_get(&global_types, stmt->assign_arr_elem.id),
+                                            stmt->assign_arr_elem.index, "ref");
+      LLVMBuildStore(builder, expr, val);
       break;
     }
 
