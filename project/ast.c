@@ -85,6 +85,17 @@ struct expr* encapsulate(struct expr *e) {
   return r;
 }
 
+LLVMValueRef get_array_size(struct expr *expr) {
+  if (expr->type != VARIABLE) {
+    return LLVMConstInt(LLVMInt32Type(), -1, 0);
+  }
+  LLVMValueRef ptr = vector_get(&global_types, expr->id);
+  LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(ptr));
+  return LLVMConstInt(LLVMInt32Type(),
+                      LLVMGetArrayLength(array_type),
+                      0);
+}
+
 void print_expr(struct expr *expr) {
   switch (expr->type) {
     case BOOL_LIT:
@@ -168,6 +179,18 @@ void print_stmt(struct stmt *stmt, int indent) {
       print_expr(stmt->while_.cond);
       printf(") {\n");
       print_stmt(stmt->while_.body, indent + 1);
+      print_indent(indent);
+      printf("}\n");
+      break;
+
+    case STMT_FOR:
+      print_indent(indent);
+      printf("for (");
+      /* x */
+      printf(": ");
+      /* collection */
+      printf(") {\n");
+      print_stmt(stmt->for_.body, indent + 1);
       print_indent(indent);
       printf("}\n");
       break;
@@ -283,6 +306,10 @@ enum value_type check_types(struct expr *expr) {
     case VARIABLE: {
       LLVMValueRef ptr = vector_get(&global_types, expr->id);
       LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
+      if (LLVMGetIntTypeWidth(t) == 0) {
+        LLVMTypeRef inner_type = LLVMGetElementType(t);
+        return LLVMGetIntTypeWidth(inner_type) == 1 ? BOOL_ARRAY : INT_ARRAY;
+      }
       return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
     }
 
@@ -380,6 +407,15 @@ struct stmt* make_while(struct expr *e, struct stmt *body) {
   return r;
 }
 
+struct stmt* make_for(size_t id, size_t collection, struct stmt *body) {
+  struct stmt* r = malloc(sizeof(struct stmt));
+  r->type = STMT_FOR;
+  r->for_.id = id;
+  r->for_.collection = collection;
+  r->for_.body = body;
+  return r;
+}
+
 struct stmt* make_ifelse(struct expr *e, struct stmt *if_body, struct stmt *else_body) {
   struct stmt* r = malloc(sizeof(struct stmt));
   r->type = STMT_IF;
@@ -421,6 +457,10 @@ void free_stmt(struct stmt *stmt) {
       free_stmt(stmt->while_.body);
       break;
 
+    case STMT_FOR:
+      free_stmt(stmt->for_.body);
+      break;
+
     case STMT_IF:
       free_expr(stmt->ifelse.cond);
       free_stmt(stmt->ifelse.if_body);
@@ -449,6 +489,11 @@ int valid_stmt(struct stmt *stmt) {
     case STMT_WHILE:
       return check_types(stmt->while_.cond) == BOOLEAN && valid_stmt(stmt->while_.body);
 
+    case STMT_FOR:
+      return /*(check_types(stmt->for_.collection) == BOOL_ARRAY
+               || check_types(stmt->for_.collection) == BOOL_ARRAY) && */
+        valid_stmt(stmt->for_.body);
+
     case STMT_IF:
       return
         check_types(stmt->ifelse.cond) == BOOLEAN &&
@@ -465,13 +510,19 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
     case LITERAL:
       return LLVMConstInt(LLVMInt32Type(), expr->value, 0);
 
-    case VARIABLE:
-      return LLVMBuildLoad(builder, vector_get(&global_types, expr->id), "loadtmp");
+    case VARIABLE: {
+      LLVMValueRef indices[] = { LLVMConstInt(LLVMInt32Type(), 0, 0) };
+      return LLVMBuildGEP(builder, vector_get(&global_types, expr->id),
+                          indices, 1, "ptr");
+    }
+      /* return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id), */
+      /*                           expr->elem.index, "ptrtmp"); */
+      //      return LLVMBuildLoad(builder, vector_get(&global_types, expr->id), "loadtmp");
 
     case ELEM: {
       LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
-                                            expr->elem.index, "ptrtmp");
-      return LLVMBuildLoad(builder, ptr, "loadtmp");
+                               expr->elem.index, "ptrtmp");
+      return LLVMBuildLoad(builder, ptr, "loadtmp"); 
     }
 
     case BIN_OP: {
@@ -521,9 +572,39 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
 
     case STMT_PRINT: {
       enum value_type arg_type = check_types(stmt->print.expr);
-      LLVMValueRef print_fn = LLVMGetNamedFunction(module, arg_type == BOOLEAN ? "print_i1" : "print_i32");
-      LLVMValueRef args[] = { codegen_expr(stmt->print.expr, module, builder) };
-      LLVMBuildCall(builder, print_fn, args, 1, "");
+      LLVMValueRef print_fn;
+      LLVMValueRef args[2];
+      int args_num;
+      switch (arg_type) {
+      case INTEGER: {
+        print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
+        args[0] = codegen_expr(stmt->print.expr, module, builder);
+        args[1] = LLVMConstInt(LLVMInt32Type(), 0, 0);
+        args_num = 2;
+        break;
+      }
+      case BOOLEAN: {
+        print_fn = LLVMGetNamedFunction(module, "print_i1");
+        args[0] = codegen_expr(stmt->print.expr, module, builder);
+        args_num = 1;
+        break;
+      }
+      case INT_ARRAY: {
+        print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
+        args[0] = codegen_expr(stmt->print.expr, module, builder);
+        args[1] = get_array_size(stmt->print.expr);
+        args_num = 2;
+        break;
+      }
+      case BOOL_ARRAY: {
+        print_fn = LLVMGetNamedFunction(module, "print_i1");
+        args[0] = codegen_expr(stmt->print.expr, module, builder);
+        args[1] = get_array_size(stmt->print.expr);
+        args_num = 2;
+        break;
+      }
+      }
+      LLVMBuildCall(builder, print_fn, args, args_num, "");
       break;
     }
 
@@ -544,6 +625,37 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       LLVMBuildBr(builder, cond_bb);
 
       LLVMPositionBuilderAtEnd(builder, cont_bb);
+      break;
+    }
+
+    case STMT_FOR: {
+      // for (x : Array) { ... }
+
+      /* pre: allocate x; int i = 0; */
+
+      LLVMValueRef array = vector_get(&global_types, stmt->for_.collection);
+      LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(array));
+      LLVMTypeRef base_type = LLVMGetElementType(array_type);
+      unsigned size = LLVMGetArrayLength(array_type);
+
+      LLVMValueRef temp = LLVMBuildAlloca(builder, base_type,
+                                          string_int_rev(&global_ids, stmt->for_.id));
+      vector_set(&global_types, stmt->for_.id, temp);
+
+      for (unsigned i = 0; i < size; ++i) {
+
+        LLVMBuildExtractValue(builder, array, i, "val");
+        
+        /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr"); */
+        /* LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val"); */
+        /* LLVMBuildStore(builder, val, temp); */
+
+        /* codegen_stmt(stmt->for_.body, module, builder); */
+
+        /* LLVMBuildStore(builder, temp, val); */
+      }
+      
+      //      LLVMBuildFree(builder, temp);
       break;
     }
 

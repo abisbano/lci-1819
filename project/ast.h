@@ -58,6 +58,7 @@ struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
 struct expr* array(struct expr *fst);
 struct expr* enqueue(struct expr *arr, struct expr *el);
 struct expr* encapsulate(struct expr *e);
+LLVMValueRef get_array_size(struct expr *e);
 
 void print_expr(struct expr *expr);
 void emit_stack_machine(struct expr *expr);
@@ -73,6 +74,7 @@ enum stmt_type {
   //  STMT_ASSIGN_ARR_ELEM,
   STMT_IF,
   STMT_WHILE,
+  STMT_FOR,
   STMT_PRINT,
 };
 
@@ -95,6 +97,11 @@ struct stmt {
       struct stmt *body;
     } while_; // for type == STMT_WHILE
     struct {
+      size_t id;
+      size_t collection;
+      struct stmt *body;
+    } for_; // for type == STMT_FOR
+    struct {
       struct expr *expr;
     } print; // for type == STMT_PRINT
   };
@@ -104,6 +111,7 @@ struct stmt* make_seq(struct stmt *fst, struct stmt *snd);
 struct stmt* make_assign(struct expr *lhs, struct expr *rhs);
 struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e);
 struct stmt* make_while(struct expr *e, struct stmt *body);
+struct stmt* make_for(size_t id, size_t collection, struct stmt *body);
 struct stmt* make_ifelse(struct expr *e, struct stmt *if_body, struct stmt *else_body);
 struct stmt* make_if(struct expr *e, struct stmt *body);
 struct stmt* make_print(struct expr *e);

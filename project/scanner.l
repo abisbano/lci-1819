@@ -21,10 +21,11 @@ int                { return INT_TYPE; }
 bool               { return BOOL_TYPE; }
 true               { return TRUE; }
 false              { return FALSE; }
+for                { return FOR; }
 {DIGIT}+           { yylval.value = atoi(yytext); return VAL; }
 {IDE}               { yylval.id = string_int_get(&global_ids, yytext); return IDE; }
 [ \t\r\n]+         /* discard whitespace */
-[-*/+><=,;\{\}\(\)\[\]] { return *yytext; }
+[-*/+><=,;:\{\}\(\)\[\]] { return *yytext; }
 \>=                { return GE; }
 \<=                { return LE; }
 ==                 { return EQ; }

@@ -31,7 +31,7 @@
 
 %token GE LE EQ NE
 %token FALSE TRUE
-%token IF ELSE WHILE PRINT
+%token IF ELSE WHILE FOR PRINT
 %token BOOL_TYPE INT_TYPE
 %token <id> IDE
 %token <value> VAL
@@ -109,6 +109,7 @@ stmt: '{' stmts '}'                         { $$ = $2; }
       | IF '(' expr ')' stmt %prec IF_ALONE { $$ = make_if($3, $5); }
       | IF '(' expr ')' stmt ELSE stmt      { $$ = make_ifelse($3, $5, $7); }
       | WHILE '(' expr ')' stmt             { $$ = make_while($3, $5); }
+      | FOR '(' IDE ':' IDE ')' stmt        { $$ = make_for($3, $5, $7); }
       | PRINT expr ';'                      { $$ = make_print($2); }
 
 expr_lhs: IDE              { $$ = variable($1); }
@@ -120,7 +121,6 @@ expr: VAL             { $$ = literal($1); }
       | IDE           { $$ = variable($1); }
       | IDE '[' VAL ']' { $$ = elem_access($1,$3); }
       | '(' expr ')'  { $$ = $2; }
-//| '[' elems ']' { print_expr($2); $$ = $2; }
 
       | expr '+' expr { $$ = binop($1, '+', $3); }
       | expr '-' expr { $$ = binop($1, '-', $3); }
@@ -195,6 +195,16 @@ int main(void)
     LLVMTypeRef print_i1_args[] = { LLVMInt1Type() };
     LLVMAddFunction(module, "print_i1",
     LLVMFunctionType(LLVMVoidType(), print_i1_args, 1, 0));
+
+    // print_i32_arr
+    LLVMTypeRef print_i32_arr_args[] = { LLVMPointerType(LLVMInt32Type(), 0), LLVMInt32Type() };
+    LLVMAddFunction(module, "print_i32_arr",
+    LLVMFunctionType(LLVMVoidType(), print_i32_arr_args, 2, 0));
+
+    // print_i1_arr
+    LLVMTypeRef print_i1_arr_args[] = { LLVMPointerType(LLVMInt1Type(), 0), LLVMInt32Type() };
+    LLVMAddFunction(module, "print_i1_arr",
+    LLVMFunctionType(LLVMVoidType(), print_i1_arr_args, 2, 0));
 
     // create "main" function
     LLVMTypeRef main_type = LLVMFunctionType(LLVMVoidType(), NULL, 0, 0);
