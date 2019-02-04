@@ -31,7 +31,8 @@ struct expr* literal(int v) {
 struct expr* variable(size_t id) {
   struct expr* r = malloc(sizeof(struct expr));
   r->type = VARIABLE;
-  r->id = id;
+  r->var.id = id;
+  r->var.type = get_type(id);
   return r;
 }
 
@@ -52,48 +53,96 @@ struct expr* binop(struct expr *lhs, int op, struct expr *rhs) {
   return r;
 }
 
-struct expr* array(struct expr *fst) {
-  struct expr* e = encapsulate(fst);
-  if (!e) {
-    // TODO: error!
-  }
+struct expr* const_array(struct queue *queue) {
   struct expr* r = malloc(sizeof(struct expr));
-  r->type = ARRAY;
-  r->array.length = 1;
-  r->array.first = e;
-  r->array.last = e;
+  r->type = (queue->type == INTEGER) ? LIT_ARR : LIT_BOOL_ARR;
+  int length = queue->length;
+  r->c_array.length = length;
+  r->c_array.value = calloc(length, sizeof(int));
+
+  struct queue_element *current = queue->first;
+  for (int i = 0; i < length; ++i, current = current->next) {
+    r->c_array.value[i] = current->element->value;
+  }
+
+  printf("\n");
+  free_queue(queue);
   return r;
 }
 
-struct expr* enqueue(struct expr *arr, struct expr *el) {
-  if (arr->type != ARRAY) {
+struct queue* make_queue(struct expr *first) {
+  if (first->type != LITERAL && first->type != BOOL_LIT) {
+    // TODO: error error error!
     return 0;
   }
-  struct expr* e = encapsulate(el);
-  arr->array.last->array_elem.next = e;
-  arr->array.last = e;
-  ++arr->array.length;
-  return arr;
+  struct queue *q = malloc(sizeof(struct queue));
+  q->type = (first->type == LITERAL) ? INTEGER : BOOLEAN;
+  q->length = 1;
+  q->first = q->last = encapsulate(first);
+  return q;
 }
 
-struct expr* encapsulate(struct expr *e) {
-  // TODO: check that e is not an ARRAY or an ARRAY_ELEM or a BINOP3
-  struct expr* r = malloc(sizeof(struct expr));
-  r->type = ARRAY_ELEM;
-  r->array_elem.elem = e;
-  r->array_elem.next = 0;
+struct queue* enqueue(struct queue *queue, struct expr *elem) {
+  if ((elem->type == LITERAL && queue->type != INTEGER)
+      || (elem->type == BOOL_LIT && queue->type != BOOLEAN)) {
+    // TODO: error error error!
+    return 0;
+  }
+  struct queue_element *next_el = encapsulate(elem);
+  ++(queue->length);
+  queue->last->next = next_el;
+  queue->last = next_el;
+
+  return queue;
+}
+
+struct queue_element *encapsulate(struct expr *expr) {
+  // We assume that encapsulate is only called after type checking
+  struct queue_element *r = malloc(sizeof(struct queue_element));
+  r->element = expr;
+  r->next = 0;
   return r;
+}
+
+void free_queue(struct queue *queue) {
+  struct queue_element *curr = queue->first;
+  struct queue_element *next = 0;
+  for (int i = 0; i < queue->length; ++i, curr = next) {
+    next = curr->next;
+    free_expr(curr->element);
+    free(curr);
+  }
+  free(queue);
 }
 
 LLVMValueRef get_array_size(struct expr *expr) {
-  if (expr->type != VARIABLE) {
+  switch (expr->type) {
+  case VARIABLE: {
+    if (expr->var.type != INT_ARRAY && expr->var.type != BOOL_ARRAY) {
+      return LLVMConstInt(LLVMInt32Type(), -1, 0);
+    }
+    LLVMValueRef ptr = vector_get(&global_types, expr->var.id);
+    LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(ptr));
+    return LLVMConstInt(LLVMInt32Type(),
+                        LLVMGetArrayLength(array_type),
+                        0);
+  }
+  case LIT_BOOL_ARR:
+  case LIT_ARR:
+    return LLVMConstInt(LLVMInt32Type(), expr->c_array.length, 0);
+  default:
     return LLVMConstInt(LLVMInt32Type(), -1, 0);
   }
-  LLVMValueRef ptr = vector_get(&global_types, expr->id);
-  LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(ptr));
-  return LLVMConstInt(LLVMInt32Type(),
-                      LLVMGetArrayLength(array_type),
-                      0);
+}
+
+enum value_type get_type(size_t id) {
+  LLVMValueRef ptr = vector_get(&global_types, id);
+  LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
+  if (LLVMGetIntTypeWidth(t) == 0) {
+    LLVMTypeRef inner_type = LLVMGetElementType(t);
+    return LLVMGetIntTypeWidth(inner_type) == 1 ? BOOL_ARRAY : INT_ARRAY;
+  }
+  return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
 }
 
 void print_expr(struct expr *expr) {
@@ -107,7 +156,7 @@ void print_expr(struct expr *expr) {
       break;
 
     case VARIABLE:
-      printf("%s", string_int_rev(&global_ids, expr->id));
+      printf("%s", string_int_rev(&global_ids, expr->var.id));
       break;
 
     case ELEM:
@@ -128,19 +177,22 @@ void print_expr(struct expr *expr) {
       printf(")");
       break;
 
-    case ARRAY:
+    case LIT_BOOL_ARR:
       printf("[");
-      print_expr(expr->array.first);
-      for (struct expr* next = expr->array.first->array_elem.next;
-           next; next = next->array_elem.next) {
-        printf(", ");
-        print_expr(next->array_elem.elem);
+      printf("%s", expr->c_array.value[0] ? "true" : "false");
+      for (int i = 1; i < expr->c_array.length; ++i) {
+        printf(", %s", expr->c_array.value[i] ? "true" : "false");
       }
       printf("]");
       break;
 
-    case ARRAY_ELEM:
-      print_expr(expr->array_elem.elem);
+    case LIT_ARR:
+      printf("[");
+      printf("%i", expr->c_array.value[0]);
+      for (int i = 1; i < expr->c_array.length; ++i) {
+        printf(", %i", expr->c_array.value[i]);
+      }
+      printf("]");
       break;
   }
 }
@@ -223,7 +275,7 @@ void emit_stack_machine(struct expr *expr) {
       break;
 
     case VARIABLE:
-      printf("load_mem %zu # %s\n", expr->id, string_int_rev(&global_ids, expr->id));
+      printf("load_mem %zu # %s\n", expr->var.id, string_int_rev(&global_ids, expr->var.id));
       break;
 
     case BIN_OP:
@@ -267,7 +319,7 @@ int emit_reg_machine(struct expr *expr) {
       break;
 
     case VARIABLE:
-      printf("r%d = load %zu # %s\n", result_reg, expr->id, string_int_rev(&global_ids, expr->id));
+      printf("r%d = load %zu # %s\n", result_reg, expr->var.id, string_int_rev(&global_ids, expr->var.id));
       break;
 
     case BIN_OP: {
@@ -303,15 +355,8 @@ enum value_type check_types(struct expr *expr) {
     case LITERAL:
       return INTEGER;
 
-    case VARIABLE: {
-      LLVMValueRef ptr = vector_get(&global_types, expr->id);
-      LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
-      if (LLVMGetIntTypeWidth(t) == 0) {
-        LLVMTypeRef inner_type = LLVMGetElementType(t);
-        return LLVMGetIntTypeWidth(inner_type) == 1 ? BOOL_ARRAY : INT_ARRAY;
-      }
-      return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
-    }
+    case VARIABLE:
+      return expr->var.type;
 
     case ELEM: {
       LLVMValueRef ptr = vector_get(&global_types, expr->elem.id);
@@ -349,9 +394,12 @@ enum value_type check_types(struct expr *expr) {
             return ERROR;
 
       }
-
-      default:
-        return ERROR;
+    case LIT_BOOL_ARR:
+      return BOOL_ARRAY;
+    case LIT_ARR:
+      return INT_ARRAY;
+    default:
+      return ERROR;
     }
   }
 }
@@ -370,14 +418,9 @@ void free_expr(struct expr *expr) {
       free_expr(expr->binop.rhs);
       free(expr);
       break;
-    case ARRAY:
-      free_expr(expr->array.first);
-      free(expr);
-      break;
-    case ARRAY_ELEM:
-      free_expr(expr->array_elem.elem);
-      if (expr->array_elem.next)
-        free_expr(expr->array_elem.next);
+    case LIT_BOOL_ARR:
+    case LIT_ARR:
+      free(expr->c_array.value);
       free(expr);
       break;
   }
@@ -511,18 +554,25 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       return LLVMConstInt(LLVMInt32Type(), expr->value, 0);
 
     case VARIABLE: {
-      LLVMValueRef indices[] = { LLVMConstInt(LLVMInt32Type(), 0, 0) };
-      return LLVMBuildGEP(builder, vector_get(&global_types, expr->id),
-                          indices, 1, "ptr");
+      switch (expr->var.type) {
+      case INTEGER:
+      case BOOLEAN:
+        return LLVMBuildLoad(builder, vector_get(&global_types, expr->var.id),
+                             "loadtmp");
+      case INT_ARRAY:
+      case BOOL_ARRAY:
+        return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->var.id),
+                                  0, "loadtmp");
+      default:
+        return NULL;
+      }
+
     }
-      /* return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id), */
-      /*                           expr->elem.index, "ptrtmp"); */
-      //      return LLVMBuildLoad(builder, vector_get(&global_types, expr->id), "loadtmp");
 
     case ELEM: {
       LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
                                expr->elem.index, "ptrtmp");
-      return LLVMBuildLoad(builder, ptr, "loadtmp"); 
+      return LLVMBuildLoad(builder, ptr, "loadtmp");
     }
 
     case BIN_OP: {
@@ -542,6 +592,26 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
         case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "gttmp");
         case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
       }
+    case LIT_ARR: {
+      LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
+      for (int i = 0; i < expr->c_array.length; ++i) {
+        values[i] = LLVMConstInt(LLVMInt32Type(), expr->c_array.value[i], 0);
+      }
+      LLVMValueRef array = LLVMConstArray(LLVMInt32Type(), values, expr->c_array.length);
+      LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
+      LLVMSetInitializer(global, array);
+      return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+    }
+    case LIT_BOOL_ARR: {
+      LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
+      for (int i = 0; i < expr->c_array.length; ++i) {
+        values[i] = LLVMConstInt(LLVMInt1Type(), expr->c_array.value[i], 0);
+      }
+      LLVMValueRef array = LLVMConstArray(LLVMInt1Type(), values, expr->c_array.length);
+      LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
+      LLVMSetInitializer(global, array);
+      return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+    }
     }
   default: break;
   }
@@ -560,7 +630,7 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       LLVMValueRef lhs;
       LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
       if (stmt->assign.lhs->type == VARIABLE) {
-        lhs = vector_get(&global_types, stmt->assign.lhs->id);
+        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
       } else if (stmt->assign.lhs->type == ELEM) {
         lhs = LLVMBuildStructGEP(builder,
                                  vector_get(&global_types, stmt->assign.lhs->elem.id),
@@ -577,10 +647,9 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       int args_num;
       switch (arg_type) {
       case INTEGER: {
-        print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
+        print_fn = LLVMGetNamedFunction(module, "print_i32");
         args[0] = codegen_expr(stmt->print.expr, module, builder);
-        args[1] = LLVMConstInt(LLVMInt32Type(), 0, 0);
-        args_num = 2;
+        args_num = 1;
         break;
       }
       case BOOLEAN: {
@@ -597,7 +666,7 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
         break;
       }
       case BOOL_ARRAY: {
-        print_fn = LLVMGetNamedFunction(module, "print_i1");
+        print_fn = LLVMGetNamedFunction(module, "print_i1_arr");
         args[0] = codegen_expr(stmt->print.expr, module, builder);
         args[1] = get_array_size(stmt->print.expr);
         args_num = 2;
@@ -629,6 +698,9 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     }
 
     case STMT_FOR: {
+
+      // TODO: work in progress
+      
       // for (x : Array) { ... }
 
       /* pre: allocate x; int i = 0; */

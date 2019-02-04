@@ -27,6 +27,7 @@
   struct expr *expr;
   struct decl_type *type;
   struct stmt *stmt;
+  struct queue *queue;
 }
 
 %token GE LE EQ NE
@@ -40,8 +41,8 @@
 %type  <stmt>  stmt
 %type  <stmt>  stmts
 %type  <type>  type
- //%type  <expr>  elems
- //%type  <expr>  elem
+%type  <queue>  elems
+%type  <expr>  elem
 
 %nonassoc IF_ALONE
 %nonassoc ELSE
@@ -121,6 +122,7 @@ expr: VAL             { $$ = literal($1); }
       | IDE           { $$ = variable($1); }
       | IDE '[' VAL ']' { $$ = elem_access($1,$3); }
       | '(' expr ')'  { $$ = $2; }
+      | '[' elems ']' { $$ = const_array($2); }
 
       | expr '+' expr { $$ = binop($1, '+', $3); }
       | expr '-' expr { $$ = binop($1, '-', $3); }
@@ -137,13 +139,13 @@ expr: VAL             { $$ = literal($1); }
 
       ;
 
-//elems: elems ',' elem { $$ = enqueue($1, $3); }
-//      | elem          { $$ = array($1); }
+elems: elems ',' elem { $$ = enqueue($1, $3); }
+      | elem          { $$ = make_queue($1); }
 
-//elem: VAL             { $$ = literal($1); }
-//      | FALSE         { $$ = bool_lit(0); }
-//      | TRUE          { $$ = bool_lit(1); }
-//      | IDE           { $$ = variable($1); }
+elem: VAL             { $$ = literal($1); }
+      | FALSE         { $$ = bool_lit(0); }
+      | TRUE          { $$ = bool_lit(1); }
+      | IDE           { $$ = variable($1); }
 
 %%
 

@@ -20,15 +20,18 @@ enum expr_type {
   VARIABLE,
   ELEM,
   BIN_OP,
-  ARRAY,
-  ARRAY_ELEM,
+  LIT_BOOL_ARR,
+  LIT_ARR,
 };
 
 struct expr {
   enum expr_type type;
   union {
     int value; // for type == LITERAL || type == BOOL_LIT
-    size_t id; // for type == VARIABLE
+    struct {
+      size_t id; // for type == VARIABLE
+      enum value_type type;
+    } var;
     struct {
       size_t id;
       int index;
@@ -39,14 +42,9 @@ struct expr {
       int op;
     } binop; // for type == BIN_OP
     struct {
+      int *value;
       int length;
-      struct expr *first;
-      struct expr *last;
-    } array; // for type == ARRAY
-    struct {
-      struct expr *elem;
-      struct expr *next;
-    } array_elem; // for type == ARRAY_ELEM
+    } c_array; // for type == LIT_ARR || type == LIT_BOOL_ARR
   };
 };
 
@@ -55,10 +53,9 @@ struct expr* literal(int v);
 struct expr* variable(size_t id);
 struct expr* elem_access(size_t id, int index);
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
-struct expr* array(struct expr *fst);
-struct expr* enqueue(struct expr *arr, struct expr *el);
-struct expr* encapsulate(struct expr *e);
+
 LLVMValueRef get_array_size(struct expr *e);
+enum value_type get_type(size_t id);
 
 void print_expr(struct expr *expr);
 void emit_stack_machine(struct expr *expr);
@@ -67,6 +64,26 @@ int emit_reg_machine(struct expr *expr);
 enum value_type check_types(struct expr *expr);
 
 void free_expr(struct expr *expr);
+
+/* support struct for generating constant arrays */
+struct queue_element {
+  struct queue_element *next;
+  struct expr *element;
+};
+
+struct queue {
+  enum value_type type; // can be INTEGER or BOOLEAN
+  int length;
+  struct queue_element *first;
+  struct queue_element *last;
+};
+
+struct expr* const_array(struct queue *queue);
+struct queue* make_queue(struct expr *first);
+struct queue* enqueue(struct queue *queue, struct expr *elem);
+struct queue_element *encapsulate(struct expr *expr);
+
+void free_queue(struct queue *queue);
 
 enum stmt_type {
   STMT_SEQ,

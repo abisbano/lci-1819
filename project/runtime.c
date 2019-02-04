@@ -19,17 +19,17 @@ void print_i32_arr(int32_t *x, size_t length) {
   for (size_t i = 1; i < length; ++i) {
     printf(", %d", x[i]);
   }
-  printf("]");
+  printf("]\n");
 }
 
 void print_i1_arr(int *x, size_t length) {
+  // FIXME: this prints always "true"
   printf("[");
-  print_i1(x[0]);
+  printf(x[0] ? "true" : "false");
   for (size_t i = 1; i < length; ++i) {
-    printf(", ");
-    print_i1(x[i]);
+    printf(x[i] ? ", true" : ", false");
   }
-  printf("]");
+  printf("]\n");
 }
 
 
