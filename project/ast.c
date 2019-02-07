@@ -65,7 +65,6 @@ struct expr* const_array(struct queue *queue) {
     r->c_array.value[i] = current->element->value;
   }
 
-  printf("\n");
   free_queue(queue);
   return r;
 }
@@ -439,6 +438,19 @@ struct stmt* make_assign(struct expr *lhs, struct expr *rhs) {
   r->type = STMT_ASSIGN;
   r->assign.lhs = lhs;
   r->assign.rhs = rhs;
+  // assignment kind is determined only by lhs
+  // type consistency is verified in valid_stmt function.
+  if (lhs->type == ELEM) {
+    r->assign.kind = A_ELEM;
+  } else if (lhs->type == VARIABLE) {
+    if (lhs->var.type == INTEGER || lhs->var.type == BOOLEAN) {
+      r->assign.kind = A_VAR;
+    } else if (lhs->var.type == INT_ARRAY || lhs->var.type == BOOL_ARRAY) {
+      r->assign.kind = A_ARR;
+    }
+  } else {
+    r->assign.kind = A_UNDEF;
+  }
   return r;
 }
 
@@ -523,8 +535,10 @@ int valid_stmt(struct stmt *stmt) {
     case STMT_ASSIGN:
       // should the language/compiler forbid accessing uninitialized variables?
       // maybe also warn about dead assignments?
-      // TODO: implement a better check on types
-      return check_types(stmt->assign.lhs) && check_types(stmt->assign.rhs);
+      /* Due to grammar, we can only have a variable or an access to array element in the
+         left-hand side of the statement, so we only need to check that types
+         of the two expressions are the same. */
+      return check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs);
 
     case STMT_PRINT:
       return check_types(stmt->print.expr) != ERROR;
@@ -629,14 +643,59 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     case STMT_ASSIGN: {
       LLVMValueRef lhs;
       LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
-      if (stmt->assign.lhs->type == VARIABLE) {
-        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
-      } else if (stmt->assign.lhs->type == ELEM) {
-        lhs = LLVMBuildStructGEP(builder,
-                                 vector_get(&global_types, stmt->assign.lhs->elem.id),
+      switch (stmt->assign.kind) {
+      case A_ELEM:
+        lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
                                  stmt->assign.lhs->elem.index, "ref");
+        LLVMBuildStore(builder, rhs, lhs);
+        break;
+      case A_VAR:
+        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
+        LLVMBuildStore(builder, rhs, lhs);
+        break;
+      case A_ARR: {
+        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
+        unsigned size = LLVMGetArrayLength(LLVMGetElementType(LLVMTypeOf(lhs)));
+        if (size != LLVMConstIntGetSExtValue(get_array_size(stmt->assign.rhs))) {
+          // TODO: ERROR!
+          break;
+        }
+        /*
+        // retrieve primitive to call
+        LLVMValueRef foo;
+        switch (stmt->assign.lhs->var.type) {
+        case INT_ARRAY:
+          foo = get_primitive("move_i32_arr");
+          break;
+        case BOOL_ARRAY:
+          foo = get_primitive("move_i1_arr");
+          break;
+        default:
+          // TODO: ERROR
+          return;
+        }
+        */
+
+        // TODO: this will be part of the body of 'get_primitive'
+        LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
+        LLVMValueRef foo_b = LLVMGetNamedFunction(module, "copy");
+        if (!foo_b) {
+          LLVMTypeRef copy_params[] = { LLVMPointerType(LLVMInt32Type(), 0),
+                                        LLVMPointerType(LLVMInt32Type(), 0),
+                                        LLVMInt32Type()};
+          LLVMValueRef foo = LLVMAddFunction(module, "copy",
+                                             LLVMFunctionType(LLVMVoidType(), copy_params, 3, 0));
+          foo_b = foo;
+        }
+
+        // create arguments array
+        LLVMValueRef args[] = { lhs_ptr, rhs, LLVMConstInt(LLVMInt32Type(), size, 0) };
+        LLVMBuildCall(builder, foo_b, args, 3, "");
+        break;
       }
-      LLVMBuildStore(builder, rhs, lhs);
+      default:
+        break;
+      }
       break;
     }
 

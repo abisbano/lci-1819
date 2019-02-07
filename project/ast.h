@@ -95,12 +95,19 @@ enum stmt_type {
   STMT_PRINT,
 };
 
+enum assign_kind {
+  A_ELEM,
+  A_VAR,
+  A_ARR,
+  A_UNDEF,
+};
+
 struct stmt {
   enum stmt_type type;
   union {
     struct {
-      struct expr *lhs;
-      struct expr *rhs;
+      struct expr *lhs, *rhs;
+      enum assign_kind kind;
     } assign; // for type == STMT_ASSIGN
     struct {
       struct stmt *fst, *snd;

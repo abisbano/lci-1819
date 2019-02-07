@@ -14,7 +14,6 @@ void print_i1(int x) {
 }
 
 void print_i32_arr(int32_t *x, size_t length) {
-  printf("ok\n");
   printf("[%d", x[0]);
   for (size_t i = 1; i < length; ++i) {
     printf(", %d", x[i]);
@@ -32,6 +31,11 @@ void print_i1_arr(int *x, size_t length) {
   printf("]\n");
 }
 
+void copy(int *x, int *y, int size) {
+  for (int i = 0; i < size; ++i) {
+    x[i] = y[i];
+  }
+}
 
 
 
