@@ -667,10 +667,10 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
         LLVMValueRef func;
         switch (stmt->assign.lhs->var.type) {
         case INT_ARRAY:
-          func = get_primitive(MOVE_I32_ARR, module, builder);
+          func = get_primitive(COPY_I32_ARR, module, builder);
           break;
         case BOOL_ARRAY:
-          func = get_primitive(MOVE_I1_ARR, module, builder);
+          func = get_primitive(COPY_I1_ARR, module, builder);
           break;
         default:
           // TODO: ERROR

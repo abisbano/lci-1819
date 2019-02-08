@@ -4,11 +4,14 @@
 #include "y.tab.h"
 
 enum primitive {
-  MOVE_I32_ARR = 0,
-  MOVE_I1_ARR = 1,
+  COPY_I32_ARR,
+  COPY_I1_ARR,
 };
 
-LLVMValueRef get_primitive(enum primitive, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMValueRef generate_move_i32_arr(enum primitive, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_move_i1_arr(enum primitive, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_move_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_move_i1_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef generate_move_arr(enum primitive p, LLVMTypeRef ptr_type,
+                               LLVMModuleRef module, LLVMBuilderRef builder);
