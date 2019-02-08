@@ -35,7 +35,11 @@ void print_i1_arr(int32_t *x, size_t length) {
     printf((x[i]) & (1 << 24) ? "true" : "false");
   }
   if (reminder > 0) {
-    for (size_t j = 0; j < reminder; ++j) {
+    if (i > 0) {
+      printf(", ");
+    }
+    printf((x[0]) & (1) ? "true" : "false");
+    for (size_t j = 1; j < reminder; ++j) {
       printf((x[i]) & (1 << (8*j)) ? ", true" : ", false");
     }
   }
