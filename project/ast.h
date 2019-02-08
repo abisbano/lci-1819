@@ -152,5 +152,4 @@ struct decl_type {
 };
 
 struct decl_type* make_decl_type(enum value_type t, int s);
-void print_decl_type(struct decl_type *decl);
 void free_decl_type(struct decl_type *decl);

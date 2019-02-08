@@ -98,6 +98,7 @@ decl: type IDE ';'     {
                             // unreachable
                             t = LLVMInt32Type();
                           }
+                          free_decl_type($1);
                           vector_set(&global_types, $2, p);
                         }
                       }

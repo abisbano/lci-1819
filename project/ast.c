@@ -8,10 +8,12 @@
 
 const char *type_name(enum value_type t) {
   switch (t) {
-    case INTEGER: return "int";
-    case BOOLEAN: return "bool";
-    case ERROR: return "error";
-    default: return "not-a-type";
+  case INTEGER: return "int";
+  case BOOLEAN: return "bool";
+  case INT_ARRAY: return "int[]";
+  case BOOL_ARRAY: return "bool[]";
+  case ERROR: return "error";
+  default: return "not-a-type";
   }
 }
 
@@ -264,165 +266,88 @@ void print_stmt(struct stmt *stmt, int indent) {
   }
 }
 
-void emit_stack_machine(struct expr *expr) {
-  switch (expr->type) {
-    case BOOL_LIT:
-      printf(expr->value ? "load_true\n" : "load_false\n");
-      break;
-
-    case LITERAL:
-      printf("load_imm %d\n", expr->value);
-      break;
-
-    case VARIABLE:
-      printf("load_mem %zu # %s\n", expr->var.id, string_int_rev(&global_ids, expr->var.id));
-      break;
-
-    case BIN_OP:
-      emit_stack_machine(expr->binop.lhs);
-      emit_stack_machine(expr->binop.rhs);
-      switch (expr->binop.op) {
-        case '+': printf("add\n"); break;
-        case '-': printf("sub\n"); break;
-        case '*': printf("mul\n"); break;
-        case '/': printf("div\n"); break;
-
-        case EQ: printf("eq\n"); break;
-        case NE: printf("ne\n"); break;
-
-        case GE: printf("ge\n"); break;
-        case LE: printf("le\n"); break;
-        case '>': printf("gt\n"); break;
-        case '<': printf("lt\n"); break;
-      }
-      break;
-  default: break;
-    // TODO: to avoid warning
-  }
-}
-
 static int next_reg = 0;
 
 static int gen_reg() {
   return next_reg++;
 }
 
-int emit_reg_machine(struct expr *expr) {
-  int result_reg = gen_reg();
-  switch (expr->type) {
-    case BOOL_LIT:
-      printf("r%d = %d\n", result_reg, expr->value);
-      break;
-
-    case LITERAL:
-      printf("r%d = %d\n", result_reg, expr->value);
-      break;
-
-    case VARIABLE:
-      printf("r%d = load %zu # %s\n", result_reg, expr->var.id, string_int_rev(&global_ids, expr->var.id));
-      break;
-
-    case BIN_OP: {
-      int lhs = emit_reg_machine(expr->binop.lhs);
-      int rhs = emit_reg_machine(expr->binop.rhs);
-      switch (expr->binop.op) {
-        case '+': printf("r%d = add r%d, r%d\n", result_reg, lhs, rhs); break;
-        case '-': printf("r%d = sub r%d, r%d\n", result_reg, lhs, rhs); break;
-        case '*': printf("r%d = mul r%d, r%d\n", result_reg, lhs, rhs); break;
-        case '/': printf("r%d = div r%d, r%d\n", result_reg, lhs, rhs); break;
-
-        case EQ: printf("r%d = eq r%d, r%d\n", result_reg, lhs, rhs); break;
-        case NE: printf("r%d = ne r%d, r%d\n", result_reg, lhs, rhs); break;
-
-        case GE: printf("r%d = ge r%d, r%d\n", result_reg, lhs, rhs); break;
-        case LE: printf("r%d = le r%d, r%d\n", result_reg, lhs, rhs); break;
-        case '>': printf("r%d = gt r%d, r%d\n", result_reg, lhs, rhs); break;
-        case '<': printf("r%d = lt r%d, r%d\n", result_reg, lhs, rhs); break;
-      }
-      break;
-    }
-  default: break;
-    // TODO: to avoid warning
-  }
-  return result_reg;
-}
-
 enum value_type check_types(struct expr *expr) {
   switch (expr->type) {
-    case BOOL_LIT:
-      return BOOLEAN;
+  case BOOL_LIT:
+    return BOOLEAN;
 
-    case LITERAL:
-      return INTEGER;
+  case LITERAL:
+    return INTEGER;
 
-    case VARIABLE:
-      return expr->var.type;
+  case VARIABLE:
+    return expr->var.type;
 
-    case ELEM: {
-      LLVMValueRef ptr = vector_get(&global_types, expr->elem.id);
-      LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
-      return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
+  case ELEM: {
+    LLVMValueRef ptr = vector_get(&global_types, expr->elem.id);
+    LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
+    return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
+  }
+
+  case BIN_OP: {
+    enum value_type lhs = check_types(expr->binop.lhs);
+    enum value_type rhs = check_types(expr->binop.rhs);
+    switch (expr->binop.op) {
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+      if (lhs == INTEGER && rhs == INTEGER)
+        return INTEGER;
+      else
+        return ERROR;
+
+    case EQ:
+    case NE:
+      if (lhs == rhs && lhs != ERROR)
+        return BOOLEAN;
+      else
+        return ERROR;
+
+    case GE:
+    case LE:
+    case '>':
+    case '<':
+      if (lhs == INTEGER && rhs == INTEGER)
+        return BOOLEAN;
+      else
+        return ERROR;
+
     }
-
-    case BIN_OP: {
-      enum value_type lhs = check_types(expr->binop.lhs);
-      enum value_type rhs = check_types(expr->binop.rhs);
-      switch (expr->binop.op) {
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-          if (lhs == INTEGER && rhs == INTEGER)
-            return INTEGER;
-          else
-            return ERROR;
-
-        case EQ:
-        case NE:
-          if (lhs == rhs && lhs != ERROR)
-            return BOOLEAN;
-          else
-            return ERROR;
-
-        case GE:
-        case LE:
-        case '>':
-        case '<':
-          if (lhs == INTEGER && rhs == INTEGER)
-            return BOOLEAN;
-          else
-            return ERROR;
-
-      }
-    case LIT_BOOL_ARR:
-      return BOOL_ARRAY;
-    case LIT_ARR:
-      return INT_ARRAY;
-    default:
-      return ERROR;
-    }
+  }
+  case LIT_BOOL_ARR:
+    return BOOL_ARRAY;
+  case LIT_ARR:
+    return INT_ARRAY;
+  default:
+    return ERROR;
   }
 }
 
 void free_expr(struct expr *expr) {
   switch (expr->type) {
-    case BOOL_LIT:
-    case LITERAL:
-    case VARIABLE:
-    case ELEM:
-      free(expr);
-      break;
+  case BOOL_LIT:
+  case LITERAL:
+  case VARIABLE:
+  case ELEM:
+    free(expr);
+    break;
 
-    case BIN_OP:
-      free_expr(expr->binop.lhs);
-      free_expr(expr->binop.rhs);
-      free(expr);
-      break;
-    case LIT_BOOL_ARR:
-    case LIT_ARR:
-      free(expr->c_array.value);
-      free(expr);
-      break;
+  case BIN_OP:
+    free_expr(expr->binop.lhs);
+    free_expr(expr->binop.rhs);
+    free(expr);
+    break;
+  case LIT_BOOL_ARR:
+  case LIT_ARR:
+    free(expr->c_array.value);
+    free(expr);
+    break;
   }
 }
 
@@ -494,35 +419,35 @@ struct stmt* make_print(struct expr *e) {
 
 void free_stmt(struct stmt *stmt) {
   switch (stmt->type) {
-    case STMT_SEQ:
-      free_stmt(stmt->seq.fst);
-      free_stmt(stmt->seq.snd);
-      break;
+  case STMT_SEQ:
+    free_stmt(stmt->seq.fst);
+    free_stmt(stmt->seq.snd);
+    break;
 
-    case STMT_ASSIGN:
-      free_expr(stmt->assign.lhs);
-      free_expr(stmt->assign.rhs);
-      break;
+  case STMT_ASSIGN:
+    free_expr(stmt->assign.lhs);
+    free_expr(stmt->assign.rhs);
+    break;
 
-    case STMT_PRINT:
-      free_expr(stmt->print.expr);
-      break;
+  case STMT_PRINT:
+    free_expr(stmt->print.expr);
+    break;
 
-    case STMT_WHILE:
-      free_expr(stmt->while_.cond);
-      free_stmt(stmt->while_.body);
-      break;
+  case STMT_WHILE:
+    free_expr(stmt->while_.cond);
+    free_stmt(stmt->while_.body);
+    break;
 
-    case STMT_FOR:
-      free_stmt(stmt->for_.body);
-      break;
+  case STMT_FOR:
+    free_stmt(stmt->for_.body);
+    break;
 
-    case STMT_IF:
-      free_expr(stmt->ifelse.cond);
-      free_stmt(stmt->ifelse.if_body);
-      if (stmt->ifelse.else_body)
-        free_stmt(stmt->ifelse.else_body);
-      break;
+  case STMT_IF:
+    free_expr(stmt->ifelse.cond);
+    free_stmt(stmt->ifelse.if_body);
+    if (stmt->ifelse.else_body)
+      free_stmt(stmt->ifelse.else_body);
+    break;
   }
 
   free(stmt);
@@ -530,104 +455,104 @@ void free_stmt(struct stmt *stmt) {
 
 int valid_stmt(struct stmt *stmt) {
   switch (stmt->type) {
-    case STMT_SEQ:
-      return valid_stmt(stmt->seq.fst) && valid_stmt(stmt->seq.snd);
+  case STMT_SEQ:
+    return valid_stmt(stmt->seq.fst) && valid_stmt(stmt->seq.snd);
 
-    case STMT_ASSIGN:
-      // should the language/compiler forbid accessing uninitialized variables?
-      // maybe also warn about dead assignments?
-      /* Due to grammar, we can only have a variable or an access to array element in the
-         left-hand side of the statement, so we only need to check that types
-         of the two expressions are the same. */
-      return check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs);
+  case STMT_ASSIGN:
+    // should the language/compiler forbid accessing uninitialized variables?
+    // maybe also warn about dead assignments?
+    /* Due to grammar, we can only have a variable or an access to array element in the
+       left-hand side of the statement, so we only need to check that types
+       of the two expressions are the same. */
+    return check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs);
 
-    case STMT_PRINT:
-      return check_types(stmt->print.expr) != ERROR;
+  case STMT_PRINT:
+    return check_types(stmt->print.expr) != ERROR;
 
-    case STMT_WHILE:
-      return check_types(stmt->while_.cond) == BOOLEAN && valid_stmt(stmt->while_.body);
+  case STMT_WHILE:
+    return check_types(stmt->while_.cond) == BOOLEAN && valid_stmt(stmt->while_.body);
 
-    case STMT_FOR:
-      return /*(check_types(stmt->for_.collection) == BOOL_ARRAY
-               || check_types(stmt->for_.collection) == BOOL_ARRAY) && */
-        valid_stmt(stmt->for_.body);
+  case STMT_FOR:
+    return /*(check_types(stmt->for_.collection) == BOOL_ARRAY
+             || check_types(stmt->for_.collection) == BOOL_ARRAY) && */
+      valid_stmt(stmt->for_.body);
 
-    case STMT_IF:
-      return
-        check_types(stmt->ifelse.cond) == BOOLEAN &&
-        valid_stmt(stmt->ifelse.if_body) &&
-        (stmt->ifelse.else_body == NULL || valid_stmt(stmt->ifelse.else_body));
+  case STMT_IF:
+    return
+      check_types(stmt->ifelse.cond) == BOOLEAN &&
+      valid_stmt(stmt->ifelse.if_body) &&
+      (stmt->ifelse.else_body == NULL || valid_stmt(stmt->ifelse.else_body));
   }
 }
 
 LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (expr->type) {
-    case BOOL_LIT:
-      return LLVMConstInt(LLVMInt1Type(), expr->value, 0);
+  case BOOL_LIT:
+    return LLVMConstInt(LLVMInt1Type(), expr->value, 0);
 
-    case LITERAL:
-      return LLVMConstInt(LLVMInt32Type(), expr->value, 0);
+  case LITERAL:
+    return LLVMConstInt(LLVMInt32Type(), expr->value, 0);
 
-    case VARIABLE: {
-      switch (expr->var.type) {
-      case INTEGER:
-      case BOOLEAN:
-        return LLVMBuildLoad(builder, vector_get(&global_types, expr->var.id),
-                             "loadtmp");
-      case INT_ARRAY:
-      case BOOL_ARRAY:
-        return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->var.id),
-                                  0, "loadtmp");
-      default:
-        return NULL;
-      }
-
+  case VARIABLE: {
+    switch (expr->var.type) {
+    case INTEGER:
+    case BOOLEAN:
+      return LLVMBuildLoad(builder, vector_get(&global_types, expr->var.id),
+                           "loadtmp");
+    case INT_ARRAY:
+    case BOOL_ARRAY:
+      return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->var.id),
+                                0, "loadtmp");
+    default:
+      return NULL;
     }
 
-    case ELEM: {
-      LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
-                               expr->elem.index, "ptrtmp");
-      return LLVMBuildLoad(builder, ptr, "loadtmp");
-    }
+  }
 
-    case BIN_OP: {
-      LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder);
-      LLVMValueRef rhs = codegen_expr(expr->binop.rhs, module, builder);
-      switch (expr->binop.op) {
-        case '+': return LLVMBuildAdd(builder, lhs, rhs, "addtmp");
-        case '-': return LLVMBuildSub(builder, lhs, rhs, "subtmp");
-        case '*': return LLVMBuildMul(builder, lhs, rhs, "multmp");
-        case '/': return LLVMBuildSDiv(builder, lhs, rhs, "divtmp");
+  case ELEM: {
+    LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
+                                          expr->elem.index, "ptrtmp");
+    return LLVMBuildLoad(builder, ptr, "loadtmp");
+  }
 
-        case EQ: return LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "eqtmp");
-        case NE: return LLVMBuildICmp(builder, LLVMIntNE, lhs, rhs, "netmp");
+  case BIN_OP: {
+    LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder);
+    LLVMValueRef rhs = codegen_expr(expr->binop.rhs, module, builder);
+    switch (expr->binop.op) {
+    case '+': return LLVMBuildAdd(builder, lhs, rhs, "addtmp");
+    case '-': return LLVMBuildSub(builder, lhs, rhs, "subtmp");
+    case '*': return LLVMBuildMul(builder, lhs, rhs, "multmp");
+    case '/': return LLVMBuildSDiv(builder, lhs, rhs, "divtmp");
 
-        case GE: return LLVMBuildICmp(builder, LLVMIntSGE, lhs, rhs, "getmp");
-        case LE: return LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "letmp");
-        case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "gttmp");
-        case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
-      }
-    case LIT_ARR: {
-      LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
-      for (int i = 0; i < expr->c_array.length; ++i) {
-        values[i] = LLVMConstInt(LLVMInt32Type(), expr->c_array.value[i], 0);
-      }
-      LLVMValueRef array = LLVMConstArray(LLVMInt32Type(), values, expr->c_array.length);
-      LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
-      LLVMSetInitializer(global, array);
-      return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+    case EQ: return LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "eqtmp");
+    case NE: return LLVMBuildICmp(builder, LLVMIntNE, lhs, rhs, "netmp");
+
+    case GE: return LLVMBuildICmp(builder, LLVMIntSGE, lhs, rhs, "getmp");
+    case LE: return LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "letmp");
+    case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "gttmp");
+    case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
     }
-    case LIT_BOOL_ARR: {
-      LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
-      for (int i = 0; i < expr->c_array.length; ++i) {
-        values[i] = LLVMConstInt(LLVMInt1Type(), expr->c_array.value[i], 0);
-      }
-      LLVMValueRef array = LLVMConstArray(LLVMInt1Type(), values, expr->c_array.length);
-      LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
-      LLVMSetInitializer(global, array);
-      return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+  }
+  case LIT_ARR: {
+    LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
+    for (int i = 0; i < expr->c_array.length; ++i) {
+      values[i] = LLVMConstInt(LLVMInt32Type(), expr->c_array.value[i], 0);
     }
+    LLVMValueRef array = LLVMConstArray(LLVMInt32Type(), values, expr->c_array.length);
+    LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
+    LLVMSetInitializer(global, array);
+    return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+  }
+  case LIT_BOOL_ARR: {
+    LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
+    for (int i = 0; i < expr->c_array.length; ++i) {
+      values[i] = LLVMConstInt(LLVMInt1Type(), expr->c_array.value[i], 0);
     }
+    LLVMValueRef array = LLVMConstArray(LLVMInt1Type(), values, expr->c_array.length);
+    LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
+    LLVMSetInitializer(global, array);
+    return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+  }
   default: break;
   }
   return NULL;
@@ -635,173 +560,173 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
 
 void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (stmt->type) {
-    case STMT_SEQ: {
-      codegen_stmt(stmt->seq.fst, module, builder);
-      codegen_stmt(stmt->seq.snd, module, builder);
+  case STMT_SEQ: {
+    codegen_stmt(stmt->seq.fst, module, builder);
+    codegen_stmt(stmt->seq.snd, module, builder);
+    break;
+  }
+
+  case STMT_ASSIGN: {
+    LLVMValueRef lhs;
+    LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
+    switch (stmt->assign.kind) {
+    case A_ELEM:
+      lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
+                               stmt->assign.lhs->elem.index, "ref");
+      LLVMBuildStore(builder, rhs, lhs);
       break;
-    }
-
-    case STMT_ASSIGN: {
-      LLVMValueRef lhs;
-      LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
-      switch (stmt->assign.kind) {
-      case A_ELEM:
-        lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
-                                 stmt->assign.lhs->elem.index, "ref");
-        LLVMBuildStore(builder, rhs, lhs);
-        break;
-      case A_VAR:
-        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
-        LLVMBuildStore(builder, rhs, lhs);
-        break;
-      case A_ARR: {
-        lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
-        LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
-        unsigned size = LLVMGetArrayLength(LLVMGetElementType(LLVMTypeOf(lhs)));
-        if (size != LLVMConstIntGetSExtValue(get_array_size(stmt->assign.rhs))) {
-          // TODO: ERROR!
-          break;
-        }
-
-        // retrieve primitive to call
-        LLVMValueRef func;
-        switch (stmt->assign.lhs->var.type) {
-        case INT_ARRAY:
-          func = get_primitive(COPY_I32_ARR, module, builder);
-          break;
-        case BOOL_ARRAY:
-          func = get_primitive(COPY_I1_ARR, module, builder);
-          break;
-        default:
-          // TODO: ERROR
-          func = NULL;
-          return;
-        }
-
-        // create arguments array
-        LLVMValueRef args[] = { lhs_ptr, rhs, LLVMConstInt(LLVMInt32Type(), size, 0) };
-        LLVMBuildCall(builder, func, args, 3, "");
+    case A_VAR:
+      lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
+      LLVMBuildStore(builder, rhs, lhs);
+      break;
+    case A_ARR: {
+      lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
+      LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
+      unsigned size = LLVMGetArrayLength(LLVMGetElementType(LLVMTypeOf(lhs)));
+      if (size != LLVMConstIntGetSExtValue(get_array_size(stmt->assign.rhs))) {
+        // TODO: ERROR!
         break;
       }
+
+      // retrieve primitive to call
+      LLVMValueRef func;
+      switch (stmt->assign.lhs->var.type) {
+      case INT_ARRAY:
+        func = get_primitive(COPY_I32_ARR, module, builder);
+        break;
+      case BOOL_ARRAY:
+        func = get_primitive(COPY_I1_ARR, module, builder);
+        break;
       default:
-        break;
+        // TODO: ERROR
+        func = NULL;
+        return;
       }
+
+      // create arguments array
+      LLVMValueRef args[] = { lhs_ptr, rhs, LLVMConstInt(LLVMInt32Type(), size, 0) };
+      LLVMBuildCall(builder, func, args, 3, "");
+      break;
+      }
+    default:
       break;
     }
+    break;
+  }
 
-    case STMT_PRINT: {
-      enum value_type arg_type = check_types(stmt->print.expr);
-      LLVMValueRef print_fn;
-      LLVMValueRef args[2];
-      int args_num;
-      switch (arg_type) {
-      case INTEGER: {
-        print_fn = LLVMGetNamedFunction(module, "print_i32");
-        args[0] = codegen_expr(stmt->print.expr, module, builder);
-        args_num = 1;
-        break;
-      }
-      case BOOLEAN: {
-        print_fn = LLVMGetNamedFunction(module, "print_i1");
-        args[0] = codegen_expr(stmt->print.expr, module, builder);
-        args_num = 1;
-        break;
-      }
-      case INT_ARRAY: {
-        print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
-        args[0] = codegen_expr(stmt->print.expr, module, builder);
-        args[1] = get_array_size(stmt->print.expr);
-        args_num = 2;
-        break;
-      }
-      case BOOL_ARRAY: {
-        print_fn = LLVMGetNamedFunction(module, "print_i1_arr");
-        args[0] = codegen_expr(stmt->print.expr, module, builder);
-        args[1] = get_array_size(stmt->print.expr);
-        args_num = 2;
-        break;
-      }
-      }
-      LLVMBuildCall(builder, print_fn, args, args_num, "");
+  case STMT_PRINT: {
+    enum value_type arg_type = check_types(stmt->print.expr);
+    LLVMValueRef print_fn;
+    LLVMValueRef args[2];
+    int args_num;
+    switch (arg_type) {
+    case INTEGER: {
+      print_fn = LLVMGetNamedFunction(module, "print_i32");
+      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args_num = 1;
       break;
     }
-
-    case STMT_WHILE: {
-      LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
-      LLVMBasicBlockRef cond_bb = LLVMAppendBasicBlock(func, "cond");
-      LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(func, "body");
-      LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(func, "cont");
-
-      LLVMBuildBr(builder, cond_bb);
-
-      LLVMPositionBuilderAtEnd(builder, cond_bb);
-      LLVMValueRef cond = codegen_expr(stmt->while_.cond, module, builder);
-      LLVMBuildCondBr(builder, cond, body_bb, cont_bb);
-
-      LLVMPositionBuilderAtEnd(builder, body_bb);
-      codegen_stmt(stmt->while_.body, module, builder);
-      LLVMBuildBr(builder, cond_bb);
-
-      LLVMPositionBuilderAtEnd(builder, cont_bb);
+    case BOOLEAN: {
+      print_fn = LLVMGetNamedFunction(module, "print_i1");
+      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args_num = 1;
       break;
     }
-
-    case STMT_FOR: {
-
-      // TODO: work in progress
-      
-      // for (x : Array) { ... }
-
-      /* pre: allocate x; int i = 0; */
-
-      LLVMValueRef array = vector_get(&global_types, stmt->for_.collection);
-      LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(array));
-      LLVMTypeRef base_type = LLVMGetElementType(array_type);
-      unsigned size = LLVMGetArrayLength(array_type);
-
-      LLVMValueRef temp = LLVMBuildAlloca(builder, base_type,
-                                          string_int_rev(&global_ids, stmt->for_.id));
-      vector_set(&global_types, stmt->for_.id, temp);
-
-      for (unsigned i = 0; i < size; ++i) {
-
-        LLVMBuildExtractValue(builder, array, i, "val");
-        
-        /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr"); */
-        /* LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val"); */
-        /* LLVMBuildStore(builder, val, temp); */
-
-        /* codegen_stmt(stmt->for_.body, module, builder); */
-
-        /* LLVMBuildStore(builder, temp, val); */
-      }
-      
-      //      LLVMBuildFree(builder, temp);
+    case INT_ARRAY: {
+      print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
+      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args[1] = get_array_size(stmt->print.expr);
+      args_num = 2;
       break;
     }
-
-    case STMT_IF: {
-      LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
-      LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(func, "body");
-      LLVMBasicBlockRef else_bb = LLVMAppendBasicBlock(func, "else");
-      LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(func, "cont");
-
-      LLVMValueRef cond = codegen_expr(stmt->ifelse.cond, module, builder);
-      LLVMBuildCondBr(builder, cond, body_bb, else_bb);
-
-      LLVMPositionBuilderAtEnd(builder, body_bb);
-      codegen_stmt(stmt->ifelse.if_body, module, builder);
-      LLVMBuildBr(builder, cont_bb);
-
-      LLVMPositionBuilderAtEnd(builder, else_bb);
-      if (stmt->ifelse.else_body) {
-        codegen_stmt(stmt->ifelse.else_body, module, builder);
-      }
-      LLVMBuildBr(builder, cont_bb);
-
-      LLVMPositionBuilderAtEnd(builder, cont_bb);
+    case BOOL_ARRAY: {
+      print_fn = LLVMGetNamedFunction(module, "print_i1_arr");
+      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args[1] = get_array_size(stmt->print.expr);
+      args_num = 2;
       break;
     }
+    }
+    LLVMBuildCall(builder, print_fn, args, args_num, "");
+    break;
+  }
+
+  case STMT_WHILE: {
+    LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+    LLVMBasicBlockRef cond_bb = LLVMAppendBasicBlock(func, "cond");
+    LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(func, "body");
+    LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(func, "cont");
+
+    LLVMBuildBr(builder, cond_bb);
+
+    LLVMPositionBuilderAtEnd(builder, cond_bb);
+    LLVMValueRef cond = codegen_expr(stmt->while_.cond, module, builder);
+    LLVMBuildCondBr(builder, cond, body_bb, cont_bb);
+
+    LLVMPositionBuilderAtEnd(builder, body_bb);
+    codegen_stmt(stmt->while_.body, module, builder);
+    LLVMBuildBr(builder, cond_bb);
+
+    LLVMPositionBuilderAtEnd(builder, cont_bb);
+    break;
+  }
+
+  case STMT_FOR: {
+
+    // TODO: work in progress
+
+    // for (x : Array) { ... }
+
+    /* pre: allocate x; int i = 0; */
+
+    LLVMValueRef array = vector_get(&global_types, stmt->for_.collection);
+    LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(array));
+    LLVMTypeRef base_type = LLVMGetElementType(array_type);
+    unsigned size = LLVMGetArrayLength(array_type);
+
+    LLVMValueRef temp = LLVMBuildAlloca(builder, base_type,
+                                        string_int_rev(&global_ids, stmt->for_.id));
+    vector_set(&global_types, stmt->for_.id, temp);
+
+    for (unsigned i = 0; i < size; ++i) {
+
+      LLVMBuildExtractValue(builder, array, i, "val");
+
+      /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr"); */
+      /* LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val"); */
+      /* LLVMBuildStore(builder, val, temp); */
+
+      /* codegen_stmt(stmt->for_.body, module, builder); */
+
+      /* LLVMBuildStore(builder, temp, val); */
+    }
+
+    //      LLVMBuildFree(builder, temp);
+    break;
+  }
+
+  case STMT_IF: {
+    LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+    LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(func, "body");
+    LLVMBasicBlockRef else_bb = LLVMAppendBasicBlock(func, "else");
+    LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(func, "cont");
+
+    LLVMValueRef cond = codegen_expr(stmt->ifelse.cond, module, builder);
+    LLVMBuildCondBr(builder, cond, body_bb, else_bb);
+
+    LLVMPositionBuilderAtEnd(builder, body_bb);
+    codegen_stmt(stmt->ifelse.if_body, module, builder);
+    LLVMBuildBr(builder, cont_bb);
+
+    LLVMPositionBuilderAtEnd(builder, else_bb);
+    if (stmt->ifelse.else_body) {
+      codegen_stmt(stmt->ifelse.else_body, module, builder);
+    }
+    LLVMBuildBr(builder, cont_bb);
+
+    LLVMPositionBuilderAtEnd(builder, cont_bb);
+    break;
+  }
   }
 }
 
@@ -810,26 +735,6 @@ struct decl_type* make_decl_type(enum value_type t, int s) {
   d->type = t;
   d->size = s;
   return d;
-}
-
-void print_decl_type(struct decl_type *decl) {
-  // TODO: maybe we need a method to print the name of the decl and semicolon?
-  switch(decl->type) {
-  case INTEGER:
-    printf("int");
-    break;
-  case BOOLEAN:
-    printf("bool");
-    break;
-  case INT_ARRAY:
-    printf("int[%i]", decl->size);
-    break;
-  case BOOL_ARRAY:
-    printf("bool[%i]", decl->size);
-    break;
-  default:
-    printf("NaT");
-  }
 }
 
 void free_decl_type(struct decl_type *decl) {
