@@ -31,7 +31,7 @@ void print_i1_arr(int *x, size_t length) {
   printf("]\n");
 }
 
-void copy(int *x, int *y, int size) {
+void move_i32_arr(int *x, int *y, int size) {
   for (int i = 0; i < size; ++i) {
     x[i] = y[i];
   }

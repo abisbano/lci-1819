@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "y.tab.h"
 #include "utils.h"
+#include "primitives.h"
 
 const char *type_name(enum value_type t) {
   switch (t) {
@@ -655,42 +656,31 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
         break;
       case A_ARR: {
         lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
+        LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
         unsigned size = LLVMGetArrayLength(LLVMGetElementType(LLVMTypeOf(lhs)));
         if (size != LLVMConstIntGetSExtValue(get_array_size(stmt->assign.rhs))) {
           // TODO: ERROR!
           break;
         }
-        /*
+
         // retrieve primitive to call
-        LLVMValueRef foo;
+        LLVMValueRef func;
         switch (stmt->assign.lhs->var.type) {
         case INT_ARRAY:
-          foo = get_primitive("move_i32_arr");
+          func = get_primitive(MOVE_I32_ARR, module, builder);
           break;
         case BOOL_ARRAY:
-          foo = get_primitive("move_i1_arr");
+          func = get_primitive(MOVE_I1_ARR, module, builder);
           break;
         default:
           // TODO: ERROR
+          func = NULL;
           return;
-        }
-        */
-
-        // TODO: this will be part of the body of 'get_primitive'
-        LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
-        LLVMValueRef foo_b = LLVMGetNamedFunction(module, "copy");
-        if (!foo_b) {
-          LLVMTypeRef copy_params[] = { LLVMPointerType(LLVMInt32Type(), 0),
-                                        LLVMPointerType(LLVMInt32Type(), 0),
-                                        LLVMInt32Type()};
-          LLVMValueRef foo = LLVMAddFunction(module, "copy",
-                                             LLVMFunctionType(LLVMVoidType(), copy_params, 3, 0));
-          foo_b = foo;
         }
 
         // create arguments array
         LLVMValueRef args[] = { lhs_ptr, rhs, LLVMConstInt(LLVMInt32Type(), size, 0) };
-        LLVMBuildCall(builder, foo_b, args, 3, "");
+        LLVMBuildCall(builder, func, args, 3, "");
         break;
       }
       default:
