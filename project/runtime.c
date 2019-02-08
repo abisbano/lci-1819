@@ -21,24 +21,23 @@ void print_i32_arr(int32_t *x, size_t length) {
   printf("]\n");
 }
 
-void print_i1_arr(int *x, size_t length) {
-  // FIXME: this prints always "true"
+void print_i1_arr(int32_t *x, size_t length) {
+  int access = length/4;
+  int reminder = length %4;
+
   printf("[");
-  printf(x[0] ? "true" : "false");
-  for (size_t i = 1; i < length; ++i) {
-    printf(x[i] ? ", true" : ", false");
+  size_t i = 0;
+  for (i = 0; i < access; ++i) {
+    if (i > 0) printf(", ");
+    printf((x[i]) & (1) ? "true, " : "false, ");
+    printf((x[i]) & (1 << 8) ? "true, " : "false, ");
+    printf((x[i]) & (1 << 16) ? "true, " : "false, ");
+    printf((x[i]) & (1 << 24) ? "true" : "false");
+  }
+  if (reminder > 0) {
+    for (size_t j = 0; j < reminder; ++j) {
+      printf((x[i]) & (1 << (8*j)) ? ", true" : ", false");
+    }
   }
   printf("]\n");
 }
-
-void move_i32_arr(int *x, int *y, int size) {
-  for (int i = 0; i < size; ++i) {
-    x[i] = y[i];
-  }
-}
-
-
-
-
-
-
