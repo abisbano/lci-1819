@@ -111,7 +111,29 @@ stmt: '{' stmts '}'                         { $$ = $2; }
       | IF '(' expr ')' stmt %prec IF_ALONE { $$ = make_if($3, $5); }
       | IF '(' expr ')' stmt ELSE stmt      { $$ = make_ifelse($3, $5, $7); }
       | WHILE '(' expr ')' stmt             { $$ = make_while($3, $5); }
-      | FOR '(' IDE ':' IDE ')' stmt        { $$ = make_for($3, $5, $7); }
+      | FOR '(' IDE ':' IDE ')' stmt   {
+        $$ = make_for($3, $5, $7);
+                                              /* if (vector_get(&global_types, $4)) { */
+                                              /*   $$ = make_for($4, $6, $8); */
+                                              /* } else { */
+                                              /*   LLVMTypeRef type; */
+                                              /*   switch ($3->type) { */
+                                              /*   case BOOLEAN: */
+                                              /*     type = LLVMInt1Type(); */
+                                              /*     break; */
+                                              /*   case INTEGER: */
+                                              /*       type = LLVMInt32Type(); */
+                                              /*       break; */
+                                              /*   default: */
+                                              /*     printf("Invalid type"); */
+                                              /*     exit(0); */
+                                              /*   } */
+                                              /*   LLVMValueRef p = LLVMBuildAlloca(builder, type, string_int_rev(&global_ids, $4)); */
+                                              /*   free_decl_type($3); */
+                                              /*   vector_set(&global_types, $4, p); */
+                                              /*   } */
+                                              /* $$ = make_for($4, $6, $8); */
+                                            }
       | PRINT expr ';'                      { $$ = make_print($2); }
 
 expr_lhs: IDE              { $$ = variable($1); }

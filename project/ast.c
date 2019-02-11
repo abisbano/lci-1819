@@ -139,6 +139,9 @@ LLVMValueRef get_array_size(struct expr *expr) {
 
 enum value_type get_type(size_t id) {
   LLVMValueRef ptr = vector_get(&global_types, id);
+  if (!ptr) {
+    return UNTYPED;
+  }
   LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
   if (LLVMGetIntTypeWidth(t) == 0) {
     LLVMTypeRef inner_type = LLVMGetElementType(t);
@@ -467,7 +470,7 @@ int valid_stmt(struct stmt *stmt) {
     return check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs);
 
   case STMT_PRINT:
-    return check_types(stmt->print.expr) != ERROR;
+    return check_types(stmt->print.expr) != ERROR && check_types(stmt->print.expr) != UNTYPED;
 
   case STMT_WHILE:
     return check_types(stmt->while_.cond) == BOOLEAN && valid_stmt(stmt->while_.body);
@@ -646,6 +649,8 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       args_num = 2;
       break;
     }
+    default:
+      return;
     }
     LLVMBuildCall(builder, print_fn, args, args_num, "");
     break;
@@ -672,36 +677,27 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
   }
 
   case STMT_FOR: {
-
-    // TODO: work in progress
-
-    // for (x : Array) { ... }
-
-    /* pre: allocate x; int i = 0; */
-
     LLVMValueRef array = vector_get(&global_types, stmt->for_.collection);
     LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(array));
     LLVMTypeRef base_type = LLVMGetElementType(array_type);
     unsigned size = LLVMGetArrayLength(array_type);
 
-    LLVMValueRef temp = LLVMBuildAlloca(builder, base_type,
-                                        string_int_rev(&global_ids, stmt->for_.id));
-    vector_set(&global_types, stmt->for_.id, temp);
+    LLVMValueRef element = vector_get(&global_types, stmt->for_.id);
+    LLVMValueRef old_val = LLVMBuildLoad(builder, element, "old_value");
 
     for (unsigned i = 0; i < size; ++i) {
+      LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr");
+      LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val");
+      LLVMBuildStore(builder, val, element);
 
-      LLVMBuildExtractValue(builder, array, i, "val");
+      codegen_stmt(stmt->for_.body, module, builder);
 
-      /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr"); */
-      /* LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val"); */
-      /* LLVMBuildStore(builder, val, temp); */
-
-      /* codegen_stmt(stmt->for_.body, module, builder); */
-
-      /* LLVMBuildStore(builder, temp, val); */
+      LLVMValueRef new_val = LLVMBuildLoad(builder, element, "new_x");
+      LLVMBuildStore(builder, new_val, ptr);
     }
 
-    //      LLVMBuildFree(builder, temp);
+    LLVMBuildStore(builder, old_val, element);
+
     break;
   }
 
