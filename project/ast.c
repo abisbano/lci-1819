@@ -39,7 +39,7 @@ struct expr* variable(size_t id) {
   return r;
 }
 
-struct expr* elem_access(size_t id, int index) {
+struct expr* elem_access(size_t id, struct expr *index) {
   struct expr* r = malloc(sizeof(struct expr));
   r->type = ELEM;
   r->elem.id = id;
@@ -165,7 +165,7 @@ void print_expr(struct expr *expr) {
       break;
 
     case ELEM:
-      printf("%s[%i]", string_int_rev(&global_ids, expr->elem.id), expr->elem.index);
+      //      printf("%s[%i]", string_int_rev(&global_ids, expr->elem.id), expr->elem.index);
       break;
 
     case BIN_OP:
@@ -337,7 +337,11 @@ void free_expr(struct expr *expr) {
   case BOOL_LIT:
   case LITERAL:
   case VARIABLE:
+    free(expr);
+    break;
+
   case ELEM:
+    free_expr(expr->elem.index);
     free(expr);
     break;
 
@@ -513,8 +517,12 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
   }
 
   case ELEM: {
-    LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id),
-                                          expr->elem.index, "ptrtmp");
+    LLVMValueRef index[] = { LLVMConstInt(LLVMInt32Type(), 0, 0),
+                             codegen_expr(expr->elem.index, module, builder) };
+    LLVMValueRef ptr = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, expr->elem.id),
+                                            index, 2, "ptrtmp");
+    /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id), */
+    /*                                       LLVMConstIntGetSExtValue(index) , "ptrtmp"); */
     return LLVMBuildLoad(builder, ptr, "loadtmp");
   }
 
@@ -573,11 +581,16 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     LLVMValueRef lhs;
     LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
     switch (stmt->assign.kind) {
-    case A_ELEM:
-      lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
-                               stmt->assign.lhs->elem.index, "ref");
+    case A_ELEM: {
+      LLVMValueRef index[] = { LLVMConstInt(LLVMInt32Type(), 0, 0),
+                               codegen_expr(stmt->assign.lhs->elem.index, module, builder) };
+      lhs = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
+                                 index, 2, "ref");
+      /* lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id), */
+      /*                          LLVMConstIntGetSExtValue(index), "ref"); */
       LLVMBuildStore(builder, rhs, lhs);
       break;
+    }
     case A_VAR:
       lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
       LLVMBuildStore(builder, rhs, lhs);

@@ -34,7 +34,7 @@ struct expr {
     } var;
     struct {
       size_t id;
-      int index;
+      struct expr *index;
     } elem;
     struct {
       struct expr *lhs;
@@ -51,7 +51,7 @@ struct expr {
 struct expr* bool_lit(int v);
 struct expr* literal(int v);
 struct expr* variable(size_t id);
-struct expr* elem_access(size_t id, int index);
+struct expr* elem_access(size_t id, struct expr *index);
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
 
 LLVMValueRef get_array_size(struct expr *e);

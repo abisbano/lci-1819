@@ -137,13 +137,13 @@ stmt: '{' stmts '}'                         { $$ = $2; }
       | PRINT expr ';'                      { $$ = make_print($2); }
 
 expr_lhs: IDE              { $$ = variable($1); }
-         | IDE '[' VAL ']' { $$ = elem_access($1, $3); }
+         | IDE '[' expr ']' { $$ = elem_access($1, $3); }
 
 expr: VAL             { $$ = literal($1); }
       | FALSE         { $$ = bool_lit(0); }
       | TRUE          { $$ = bool_lit(1); }
       | IDE           { $$ = variable($1); }
-      | IDE '[' VAL ']' { $$ = elem_access($1,$3); }
+      | IDE '[' expr ']' { $$ = elem_access($1,$3); }
       | '(' expr ')'  { $$ = $2; }
       | '[' elems ']' { $$ = const_array($2); }
 
