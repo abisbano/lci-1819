@@ -7,10 +7,12 @@ enum primitive {
   COPY_I32_ARR,
   COPY_I1_ARR,
   ADD_ARR_ARR,
-  ADD_I32_ARR,
+  ADD_ARR_I32,
   SUB_ARR_ARR,
   SUB_I32_ARR,
-  MUL_I32_ARR,
+  SUB_ARR_I32,
+  MUL_ARR_I32,
+  DIV_ARR_I32,
   DIV_I32_ARR,
   EQ_ARR,
 };
@@ -33,8 +35,29 @@ LLVMValueRef get_primitive_result_bool(LLVMModuleRef module,
 
 LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
+LLVMValueRef generate_add_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_sub_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef generate_add_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_sub_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_sub_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_mul_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_div_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_div_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef generate_eq_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
+
 LLVMValueRef generate_move_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 LLVMValueRef generate_move_i1_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
+LLVMValueRef generate_arith_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
+                                    LLVMValueRef (*)
+                                    (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *));
+LLVMValueRef generate_arith_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
+                                    LLVMValueRef (*)
+                                    (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *));
+LLVMValueRef generate_arith_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
+                                    LLVMValueRef (*)
+                                    (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *));
 LLVMValueRef generate_move_arr(enum primitive p, LLVMTypeRef ptr_type,
                                LLVMModuleRef module, LLVMBuilderRef builder);

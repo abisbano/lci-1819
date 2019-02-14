@@ -299,6 +299,9 @@ enum value_type check_types(struct expr *expr) {
     case '/':
       if (lhs == INTEGER && rhs == INTEGER)
         return INTEGER;
+      else if ((lhs == INT_ARRAY && rhs == INTEGER) ||
+               (lhs == INTEGER && rhs == INT_ARRAY))
+        return INT_ARRAY;
       else
         return ERROR;
 
@@ -543,7 +546,12 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
       }
     } else if (type_lhs == INT_ARRAY && type_lhs == type_rhs) {
-      unsigned size = LLVMGetArrayLength(LLVMTypeOf(lhs));
+      unsigned size_lhs = get_array_size(LLVMTypeOf(lhs));
+      unsigned size_rhs = get_array_size(LLVMTypeOf(rhs));
+      if (size_lhs != size_rhs) {
+        // TODO: ERROR ERROR
+        return NULL;
+      }
       printf("ok\n");
       LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "ptr");
       LLVMValueRef rhs_ptr = LLVMBuildStructGEP(builder, rhs, 0, "ptr");
@@ -552,24 +560,72 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       case '+': {
         return get_primitive_result_int(module, builder,
                                         ADD_ARR_ARR, lhs_ptr, rhs_ptr,
-                                        size, "addtmp");
+                                        size_lhs, "addtmp");
       }
       case '-': {
         return get_primitive_result_int(module, builder,
                                         SUB_ARR_ARR, lhs_ptr, rhs_ptr,
-                                        size, "addtmp");
+                                        size_lhs, "addtmp");
       }
       case EQ: {
         return get_primitive_result_int(module, builder,
                                         EQ_ARR, lhs_ptr, rhs_ptr,
-                                        size, "addtmp");
+                                        size_lhs, "addtmp");
       }
       default:
         /* unsupported */
         return NULL;
       }
-      //    } else if () {
+    } else if ((type_lhs == INT_ARRAY && type_rhs == INTEGER) ||
+               (type_lhs == INTEGER && type_rhs == INT_ARRAY)) {
+      unsigned size;
+      LLVMValueRef ptr;
+      LLVMValueRef scalar;
+      if (type_lhs == INT_ARRAY) {
+        size = get_array_size(LLVMTypeOf(lhs));
+        ptr = LLVMBuildStructGEP(builder, lhs, 0, "ptr");
+        scalar = rhs;
+      } else {
+        size = get_array_size(LLVMTypeOf(rhs));
+        ptr = LLVMBuildStructGEP(builder, rhs, 0, "ptr");
+        scalar = lhs;
+      }
 
+      switch (expr->binop.op) {
+      case '+': {
+        return get_primitive_result_int(module, builder,
+                                        ADD_ARR_I32, ptr, scalar,
+                                        size, "addtmp");
+      }
+      case '-': {
+        if (type_lhs == INT_ARRAY)
+          return get_primitive_result_int(module, builder,
+                                          SUB_ARR_I32, ptr, scalar,
+                                          size, "subtmp");
+        else
+          return get_primitive_result_int(module, builder,
+                                          SUB_I32_ARR, ptr, scalar,
+                                          size, "subtmp");
+      }
+      case '*': {
+        return get_primitive_result_int(module, builder,
+                                        MUL_ARR_I32, ptr, scalar,
+                                        size, "addtmp");
+      }
+      case '/': {
+        if (type_lhs == INT_ARRAY)
+          return get_primitive_result_int(module, builder,
+                                          DIV_ARR_I32, ptr, scalar,
+                                          size, "divtmp");
+        else
+          return get_primitive_result_int(module, builder,
+                                          DIV_I32_ARR, ptr, scalar,
+                                          size, "divtmp");
+      }
+      default:
+        /* unsupported */
+        return NULL;
+      }
     }
   }
   case LIT_ARR: {
@@ -679,6 +735,7 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     case INT_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
       LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
+      printf("arrivo qua?\n");
       args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
       args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;
