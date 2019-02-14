@@ -117,24 +117,13 @@ void free_queue(struct queue *queue) {
   free(queue);
 }
 
-LLVMValueRef get_array_size(struct expr *expr) {
-  switch (expr->type) {
-  case VARIABLE: {
-    if (expr->var.type != INT_ARRAY && expr->var.type != BOOL_ARRAY) {
-      return LLVMConstInt(LLVMInt32Type(), -1, 0);
-    }
-    LLVMValueRef ptr = vector_get(&global_types, expr->var.id);
-    LLVMTypeRef array_type = LLVMGetElementType(LLVMTypeOf(ptr));
-    return LLVMConstInt(LLVMInt32Type(),
-                        LLVMGetArrayLength(array_type),
-                        0);
+unsigned get_array_size(LLVMTypeRef type) {
+  unsigned result = -1;
+  while (LLVMGetIntTypeWidth(type) == 0) {
+    result = LLVMGetArrayLength(type);
+    type = LLVMGetElementType(type);
   }
-  case LIT_BOOL_ARR:
-  case LIT_ARR:
-    return LLVMConstInt(LLVMInt32Type(), expr->c_array.length, 0);
-  default:
-    return LLVMConstInt(LLVMInt32Type(), -1, 0);
-  }
+  return result;
 }
 
 enum value_type get_type(size_t id) {
@@ -287,9 +276,15 @@ enum value_type check_types(struct expr *expr) {
     return expr->var.type;
 
   case ELEM: {
+    if (check_types(expr->elem.index) != INTEGER)
+      return ERROR;
     LLVMValueRef ptr = vector_get(&global_types, expr->elem.id);
     LLVMTypeRef t = LLVMGetElementType(LLVMTypeOf(ptr));
-    return LLVMGetIntTypeWidth(t) == 1 ? BOOLEAN : INTEGER;
+    unsigned size = LLVMGetIntTypeWidth(t);
+    if (size != 0)
+      return ERROR;
+    LLVMTypeRef inner_type = LLVMGetElementType(t);
+    return LLVMGetIntTypeWidth(inner_type) == 1 ? BOOLEAN : INTEGER;
   }
 
   case BIN_OP: {
@@ -298,6 +293,8 @@ enum value_type check_types(struct expr *expr) {
     switch (expr->binop.op) {
     case '+':
     case '-':
+      if (lhs == INT_ARRAY && rhs == INT_ARRAY)
+        return INT_ARRAY;
     case '*':
     case '/':
       if (lhs == INTEGER && rhs == INTEGER)
@@ -471,7 +468,8 @@ int valid_stmt(struct stmt *stmt) {
     /* Due to grammar, we can only have a variable or an access to array element in the
        left-hand side of the statement, so we only need to check that types
        of the two expressions are the same. */
-    return check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs);
+    return check_types(stmt->assign.lhs) != ERROR &&
+      (check_types(stmt->assign.lhs) == check_types(stmt->assign.rhs));
 
   case STMT_PRINT:
     return check_types(stmt->print.expr) != ERROR && check_types(stmt->print.expr) != UNTYPED;
@@ -508,8 +506,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
                            "loadtmp");
     case INT_ARRAY:
     case BOOL_ARRAY:
-      return LLVMBuildStructGEP(builder, vector_get(&global_types, expr->var.id),
-                                0, "loadtmp");
+      return vector_get(&global_types, expr->var.id);
     default:
       return NULL;
     }
@@ -521,27 +518,58 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
                              codegen_expr(expr->elem.index, module, builder) };
     LLVMValueRef ptr = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, expr->elem.id),
                                             index, 2, "ptrtmp");
-    /* LLVMValueRef ptr = LLVMBuildStructGEP(builder, vector_get(&global_types, expr->elem.id), */
-    /*                                       LLVMConstIntGetSExtValue(index) , "ptrtmp"); */
     return LLVMBuildLoad(builder, ptr, "loadtmp");
   }
 
   case BIN_OP: {
+    enum value_type type_lhs = check_types(expr->binop.lhs);
+    enum value_type type_rhs = check_types(expr->binop.rhs);
     LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder);
     LLVMValueRef rhs = codegen_expr(expr->binop.rhs, module, builder);
-    switch (expr->binop.op) {
-    case '+': return LLVMBuildAdd(builder, lhs, rhs, "addtmp");
-    case '-': return LLVMBuildSub(builder, lhs, rhs, "subtmp");
-    case '*': return LLVMBuildMul(builder, lhs, rhs, "multmp");
-    case '/': return LLVMBuildSDiv(builder, lhs, rhs, "divtmp");
 
-    case EQ: return LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "eqtmp");
-    case NE: return LLVMBuildICmp(builder, LLVMIntNE, lhs, rhs, "netmp");
+    if (type_lhs == INTEGER && type_lhs == type_rhs) {
+      switch (expr->binop.op) {
+      case '+': return LLVMBuildAdd(builder, lhs, rhs, "addtmp");
+      case '-': return LLVMBuildSub(builder, lhs, rhs, "subtmp");
+      case '*': return LLVMBuildMul(builder, lhs, rhs, "multmp");
+      case '/': return LLVMBuildSDiv(builder, lhs, rhs, "divtmp");
 
-    case GE: return LLVMBuildICmp(builder, LLVMIntSGE, lhs, rhs, "getmp");
-    case LE: return LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "letmp");
-    case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "gttmp");
-    case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
+      case EQ: return LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "eqtmp");
+      case NE: return LLVMBuildICmp(builder, LLVMIntNE, lhs, rhs, "netmp");
+
+      case GE: return LLVMBuildICmp(builder, LLVMIntSGE, lhs, rhs, "getmp");
+      case LE: return LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "letmp");
+      case '>': return LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "gttmp");
+      case '<': return LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "lttmp");
+      }
+    } else if (type_lhs == INT_ARRAY && type_lhs == type_rhs) {
+      unsigned size = LLVMGetArrayLength(LLVMTypeOf(lhs));
+      printf("ok\n");
+      LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "ptr");
+      LLVMValueRef rhs_ptr = LLVMBuildStructGEP(builder, rhs, 0, "ptr");
+      printf("ok\n");
+      switch (expr->binop.op) {
+      case '+': {
+        return get_primitive_result_int(module, builder,
+                                        ADD_ARR_ARR, lhs_ptr, rhs_ptr,
+                                        size, "addtmp");
+      }
+      case '-': {
+        return get_primitive_result_int(module, builder,
+                                        SUB_ARR_ARR, lhs_ptr, rhs_ptr,
+                                        size, "addtmp");
+      }
+      case EQ: {
+        return get_primitive_result_int(module, builder,
+                                        EQ_ARR, lhs_ptr, rhs_ptr,
+                                        size, "addtmp");
+      }
+      default:
+        /* unsupported */
+        return NULL;
+      }
+      //    } else if () {
+
     }
   }
   case LIT_ARR: {
@@ -552,7 +580,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
     LLVMValueRef array = LLVMConstArray(LLVMInt32Type(), values, expr->c_array.length);
     LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
     LLVMSetInitializer(global, array);
-    return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+    return global;
   }
   case LIT_BOOL_ARR: {
     LLVMValueRef *values = calloc(expr->c_array.length, sizeof(LLVMValueRef));
@@ -562,7 +590,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
     LLVMValueRef array = LLVMConstArray(LLVMInt1Type(), values, expr->c_array.length);
     LLVMValueRef global = LLVMAddGlobal(module, LLVMTypeOf(array), "array");
     LLVMSetInitializer(global, array);
-    return LLVMBuildStructGEP(builder, global, 0, "arrtmp");
+    return global;
   }
   default: break;
   }
@@ -586,8 +614,6 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
                                codegen_expr(stmt->assign.lhs->elem.index, module, builder) };
       lhs = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
                                  index, 2, "ref");
-      /* lhs = LLVMBuildStructGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id), */
-      /*                          LLVMConstIntGetSExtValue(index), "ref"); */
       LLVMBuildStore(builder, rhs, lhs);
       break;
     }
@@ -598,8 +624,9 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     case A_ARR: {
       lhs = vector_get(&global_types, stmt->assign.lhs->var.id);
       LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "lhs");
-      unsigned size = LLVMGetArrayLength(LLVMGetElementType(LLVMTypeOf(lhs)));
-      if (size != LLVMConstIntGetSExtValue(get_array_size(stmt->assign.rhs))) {
+      unsigned size_lhs = get_array_size(LLVMTypeOf(lhs));
+      unsigned size_rhs = get_array_size(LLVMTypeOf(rhs));
+      if (size_lhs != size_rhs) {
         // TODO: ERROR!
         break;
       }
@@ -620,7 +647,8 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       }
 
       // create arguments array
-      LLVMValueRef args[] = { lhs_ptr, rhs, LLVMConstInt(LLVMInt32Type(), size, 0) };
+      LLVMValueRef rhs_ptr = LLVMBuildStructGEP(builder, rhs, 0, "rhs");
+      LLVMValueRef args[] = { lhs_ptr, rhs_ptr, LLVMConstInt(LLVMInt32Type(), size_lhs, 0) };
       LLVMBuildCall(builder, func, args, 3, "");
       break;
       }
@@ -650,15 +678,17 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     }
     case INT_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
-      args[0] = codegen_expr(stmt->print.expr, module, builder);
-      args[1] = get_array_size(stmt->print.expr);
+      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
+      args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
+      args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;
       break;
     }
     case BOOL_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i1_arr");
-      args[0] = codegen_expr(stmt->print.expr, module, builder);
-      args[1] = get_array_size(stmt->print.expr);
+      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
+      args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
+      args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;
       break;
     }
@@ -749,3 +779,4 @@ struct decl_type* make_decl_type(enum value_type t, int s) {
 void free_decl_type(struct decl_type *decl) {
   free(decl);
 }
+

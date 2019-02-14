@@ -29,13 +29,13 @@ struct expr {
   union {
     int value; // for type == LITERAL || type == BOOL_LIT
     struct {
-      size_t id; // for type == VARIABLE
+      size_t id;
       enum value_type type;
-    } var;
+    } var; // for type == VARIABLE
     struct {
       size_t id;
       struct expr *index;
-    } elem;
+    } elem; // for type == ELEM
     struct {
       struct expr *lhs;
       struct expr *rhs;
@@ -54,7 +54,7 @@ struct expr* variable(size_t id);
 struct expr* elem_access(size_t id, struct expr *index);
 struct expr* binop(struct expr *lhs, int op, struct expr *rhs);
 
-LLVMValueRef get_array_size(struct expr *e);
+unsigned get_array_size(LLVMTypeRef type);
 enum value_type get_type(size_t id);
 
 void print_expr(struct expr *expr);

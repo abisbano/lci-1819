@@ -1,11 +1,46 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "primitives.h"
 
 const char* names[] = {
   [COPY_I32_ARR] = "copy.i32.arr",
   [COPY_I1_ARR] = "copy.i1.arr",
+  [ADD_ARR_ARR] = "add.arr.arr",
+  [ADD_I32_ARR] = "add.i32.arr",
+  [SUB_ARR_ARR] = "sub.arr.arr",
+  [SUB_I32_ARR] = "sub.i32.arr",
+  [MUL_I32_ARR] = "mul.i32.arr",
+  [DIV_I32_ARR] = "div.i32.arr",
+  [EQ_ARR] = "eq.arr",
 };
+
+LLVMValueRef get_primitive_result_int(LLVMModuleRef module,
+                                      LLVMBuilderRef builder,
+                                      enum primitive p,
+                                      LLVMValueRef lhs,
+                                      LLVMValueRef rhs,
+                                      unsigned size,
+                                      const char *result_name) {
+  LLVMTypeRef ty = LLVMArrayType(LLVMInt32Type(), size);
+  LLVMValueRef res = LLVMBuildArrayAlloca(builder, ty, 0, result_name);
+  LLVMValueRef res_ptr = LLVMBuildStructGEP(builder, res, 0, "");
+  LLVMValueRef args[] = {res_ptr, lhs, rhs, LLVMConstInt(LLVMInt32Type(), size, 0)};
+  LLVMValueRef foo = get_primitive(COPY_I32_ARR, module, builder);
+  return LLVMBuildCall(builder, foo, args, 4, result_name);
+}
+
+LLVMValueRef get_primitive_result_bool(LLVMModuleRef module,
+                                       LLVMBuilderRef builder,
+                                       enum primitive p,
+                                       LLVMValueRef lhs,
+                                       LLVMValueRef rhs,
+                                       unsigned size,
+                                       const char *result_name) {
+  LLVMValueRef args[] = {lhs, rhs, LLVMConstInt(LLVMInt32Type(), size, 0)};
+  LLVMValueRef foo = get_primitive(p, module, builder);
+  return LLVMBuildCall(builder, foo, args, 3, result_name);
+}
 
 LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
   const char *name = names[p];
@@ -17,6 +52,9 @@ LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRe
     return generate_move_i32_arr(p, module, builder);
   case COPY_I1_ARR:
     return generate_move_i1_arr(p, module, builder);
+  default:
+    printf("yay! %i\n", p);
+    return NULL;
   }
 }
 

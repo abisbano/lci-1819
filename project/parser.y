@@ -168,7 +168,6 @@ elems: elems ',' elem { $$ = enqueue($1, $3); }
 elem: VAL             { $$ = literal($1); }
       | FALSE         { $$ = bool_lit(0); }
       | TRUE          { $$ = bool_lit(1); }
-      | IDE           { $$ = variable($1); }
 
 %%
 
