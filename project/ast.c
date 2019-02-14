@@ -552,10 +552,8 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
         // TODO: ERROR ERROR
         return NULL;
       }
-      printf("ok\n");
       LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "ptr");
       LLVMValueRef rhs_ptr = LLVMBuildStructGEP(builder, rhs, 0, "ptr");
-      printf("ok\n");
       switch (expr->binop.op) {
       case '+': {
         return get_primitive_result_int(module, builder,
@@ -565,12 +563,17 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       case '-': {
         return get_primitive_result_int(module, builder,
                                         SUB_ARR_ARR, lhs_ptr, rhs_ptr,
-                                        size_lhs, "addtmp");
+                                        size_lhs, "subtmp");
       }
       case EQ: {
-        return get_primitive_result_int(module, builder,
+        return get_primitive_result_bool(module, builder,
                                         EQ_ARR, lhs_ptr, rhs_ptr,
-                                        size_lhs, "addtmp");
+                                        size_lhs, "eqtmp");
+      }
+      case NE: {
+        return get_primitive_result_bool(module, builder,
+                                        NE_ARR, lhs_ptr, rhs_ptr,
+                                        size_lhs, "netmp");
       }
       default:
         /* unsupported */
@@ -610,7 +613,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       case '*': {
         return get_primitive_result_int(module, builder,
                                         MUL_ARR_I32, ptr, scalar,
-                                        size, "addtmp");
+                                        size, "multmp");
       }
       case '/': {
         if (type_lhs == INT_ARRAY)
@@ -735,7 +738,6 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     case INT_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
       LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
-      printf("arrivo qua?\n");
       args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
       args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;

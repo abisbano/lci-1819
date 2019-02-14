@@ -15,6 +15,7 @@ const char* names[] = {
   [DIV_ARR_I32] = "div.arr.i32",
   [DIV_I32_ARR] = "div.i32.arr",
   [EQ_ARR] = "eq.arr",
+  [NE_ARR] = "ne.arr",
 };
 
 LLVMValueRef get_primitive_result_int(LLVMModuleRef module,
@@ -72,9 +73,10 @@ LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRe
   case DIV_ARR_I32:
     return generate_div_arr_i32(p, module, builder);
   case EQ_ARR:
-    return generate_eq_arr(p, module, builder);
+    return generate_cmp_arr(p, module, builder, LLVMIntEQ);
+  case NE_ARR:
+    return generate_cmp_arr(p, module, builder, LLVMIntNE);
   default:
-    printf("yay! %i\n", p);
     return NULL;
   }
 }
@@ -417,6 +419,79 @@ LLVMValueRef generate_move_arr(enum primitive p, LLVMTypeRef ptr_type,
   return func;
 }
 
-LLVMValueRef generate_eq_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  return NULL;
+
+LLVMValueRef generate_cmp_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
+                              LLVMIntPredicate pred) {
+  LLVMTypeRef ptr_type = LLVMPointerType(LLVMInt32Type(), 0);
+  LLVMTypeRef params[] = { ptr_type, ptr_type, LLVMInt32Type() };
+  LLVMTypeRef ret_type = LLVMInt1Type();
+  LLVMValueRef func = LLVMAddFunction(module, names[p],
+                                      LLVMFunctionType(ret_type, params, 3, 0));
+
+  LLVMBasicBlockRef bb_func = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef bb_guard = LLVMAppendBasicBlock(func, "guard");
+  LLVMBasicBlockRef bb_body = LLVMAppendBasicBlock(func, "body");
+  LLVMBasicBlockRef bb_cont_fail = LLVMAppendBasicBlock(func, "cont_fail");
+  LLVMBasicBlockRef bb_cont_ok = LLVMAppendBasicBlock(func, "cont_ok");
+  LLVMBasicBlockRef bb_end = LLVMAppendBasicBlock(func, "end");
+
+  LLVMBuilderRef builder_func = LLVMCreateBuilder();
+
+  // retrieve parameters
+  LLVMValueRef p_fst = LLVMGetParam(func, 0);
+  LLVMValueRef p_snd = LLVMGetParam(func, 1);
+  LLVMValueRef p_size = LLVMGetParam(func, 2);
+
+  // Initialize values
+  LLVMPositionBuilderAtEnd(builder_func, bb_func);
+  LLVMValueRef fst = LLVMBuildAlloca(builder_func, ptr_type, "fst");
+  LLVMValueRef snd = LLVMBuildAlloca(builder_func, ptr_type, "snd");
+  LLVMValueRef size = LLVMBuildAlloca(builder_func, LLVMInt32Type(), "size");
+  LLVMValueRef index = LLVMBuildAlloca(builder_func, LLVMInt32Type(), "i");
+  LLVMBuildStore(builder_func, p_fst, fst);
+  LLVMBuildStore(builder_func, p_snd, snd);
+  LLVMBuildStore(builder_func, p_size, size);
+  LLVMBuildStore(builder_func, LLVMConstInt(LLVMInt32Type(), 0, 0), index);
+  LLVMBuildBr(builder_func, bb_guard);
+
+  // guard
+  LLVMPositionBuilderAtEnd(builder_func, bb_guard);
+  LLVMValueRef comp_lhs = LLVMBuildLoad(builder_func, index, "");
+  LLVMValueRef comp_rhs = LLVMBuildLoad(builder_func, size, "");
+  LLVMValueRef comp = LLVMBuildICmp(builder_func, LLVMIntSLT, comp_lhs, comp_rhs, "");
+  LLVMBuildCondBr(builder_func, comp, bb_body, bb_end);
+
+  // body
+  LLVMPositionBuilderAtEnd(builder_func, bb_body);
+
+  LLVMValueRef b_index = LLVMBuildLoad(builder_func, index, "");
+  LLVMValueRef b_index_value[] = { LLVMBuildSExt(builder_func, b_index, LLVMInt32Type(), "") };
+  LLVMValueRef b_fst = LLVMBuildLoad(builder_func, fst, "");
+  LLVMValueRef b_fst_gep = LLVMBuildInBoundsGEP(builder_func, b_fst,
+                                                b_index_value, 1, "");
+  LLVMValueRef b_fst_val = LLVMBuildLoad(builder_func, b_fst_gep, "");
+
+  LLVMValueRef b_snd = LLVMBuildLoad(builder_func, snd, "");
+  LLVMValueRef b_snd_gep = LLVMBuildInBoundsGEP(builder_func, b_snd,
+                                                b_index_value, 1, "");
+  LLVMValueRef b_snd_val = LLVMBuildLoad(builder_func, b_snd_gep, "");
+
+  LLVMValueRef b_cmp = LLVMBuildICmp(builder_func, pred, b_fst_val, b_snd_val, "cmptmp");
+  LLVMBuildCondBr(builder_func, b_cmp, bb_cont_ok, bb_cont_fail);
+
+  LLVMPositionBuilderAtEnd(builder_func, bb_cont_ok);
+  LLVMValueRef b_index_new = LLVMBuildAdd(builder_func, b_index,
+                                          LLVMConstInt(LLVMInt32Type(), 1, 0), "");
+  LLVMBuildStore(builder_func, b_index_new, index);
+  LLVMBuildBr(builder_func, bb_guard);
+
+  // fail
+  LLVMPositionBuilderAtEnd(builder_func, bb_cont_fail);
+  LLVMBuildRet(builder_func, LLVMConstInt(LLVMInt1Type(), 0, 0));
+
+  // cont
+  LLVMPositionBuilderAtEnd(builder_func, bb_end);
+  LLVMBuildRet(builder_func, LLVMConstInt(LLVMInt1Type(), 1, 0));
+
+  return func;
 }

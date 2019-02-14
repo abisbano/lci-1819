@@ -15,6 +15,7 @@ enum primitive {
   DIV_ARR_I32,
   DIV_I32_ARR,
   EQ_ARR,
+  NE_ARR,
 };
 
 LLVMValueRef get_primitive_result_int(LLVMModuleRef module,
@@ -45,8 +46,6 @@ LLVMValueRef generate_mul_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBu
 LLVMValueRef generate_div_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 LLVMValueRef generate_div_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMValueRef generate_eq_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-
 LLVMValueRef generate_move_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 LLVMValueRef generate_move_i1_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -61,3 +60,5 @@ LLVMValueRef generate_arith_i32_arr(enum primitive p, LLVMModuleRef module, LLVM
                                     (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *));
 LLVMValueRef generate_move_arr(enum primitive p, LLVMTypeRef ptr_type,
                                LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef generate_cmp_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
+                              LLVMIntPredicate pred);
