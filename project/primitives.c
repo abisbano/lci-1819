@@ -52,26 +52,46 @@ LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRe
   if (func) return func;
 
   switch (p) {
-  case COPY_I32_ARR:
-    return generate_move_i32_arr(p, module, builder);
-  case COPY_I1_ARR:
-    return generate_move_i1_arr(p, module, builder);
-  case ADD_ARR_ARR:
-    return generate_add_arr_arr(p, module, builder);
-  case SUB_ARR_ARR:
-    return generate_sub_arr_arr(p, module, builder);
-  case ADD_ARR_I32:
-    return generate_add_arr_i32(p, module, builder);
-  case SUB_I32_ARR:
-    return generate_sub_i32_arr(p, module, builder);
-  case SUB_ARR_I32:
-    return generate_sub_arr_i32(p, module, builder);
-  case MUL_ARR_I32:
-    return generate_mul_arr_i32(p, module, builder);
-  case DIV_I32_ARR:
-    return generate_div_i32_arr(p, module, builder);
-  case DIV_ARR_I32:
-    return generate_div_arr_i32(p, module, builder);
+  case COPY_I32_ARR: {
+    LLVMTypeRef pointer_type = LLVMPointerType(LLVMInt32Type(), 0);
+    return generate_move_arr(p, pointer_type, module, builder);
+  }
+  case COPY_I1_ARR: {
+    LLVMTypeRef pointer_type = LLVMPointerType(LLVMInt1Type(), 0);
+    return generate_move_arr(p, pointer_type, module, builder);
+  }
+  case ADD_ARR_ARR: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildAdd;
+    return generate_arith_arr_arr(p, module, builder, foo);
+  }
+  case SUB_ARR_ARR: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
+    return generate_arith_arr_arr(p, module, builder, foo);
+  }
+  case ADD_ARR_I32: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildAdd;
+    return generate_arith_arr_i32(p, module, builder, foo);
+  }
+  case SUB_I32_ARR: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
+    return generate_arith_i32_arr(p, module, builder, foo);
+  }
+  case SUB_ARR_I32: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
+    return generate_arith_arr_i32(p, module, builder, foo);
+  }
+  case MUL_ARR_I32: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildMul;
+    return generate_arith_arr_i32(p, module, builder, foo);
+  }
+  case DIV_I32_ARR: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSDiv;
+    return generate_arith_i32_arr(p, module, builder, foo);
+  }
+  case DIV_ARR_I32: {
+    LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSDiv;
+    return generate_arith_arr_i32(p, module, builder, foo);
+  }
   case EQ_ARR:
     return generate_cmp_arr(p, module, builder, LLVMIntEQ);
   case NE_ARR:
@@ -80,57 +100,6 @@ LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRe
     return NULL;
   }
 }
-
-LLVMValueRef generate_add_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildAdd;
-  return generate_arith_arr_arr(p, module, builder, foo);
-}
-
-LLVMValueRef generate_sub_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
-  return generate_arith_arr_arr(p, module, builder, foo);
-}
-
-LLVMValueRef generate_add_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildAdd;
-  return generate_arith_arr_i32(p, module, builder, foo);
-}
-
-LLVMValueRef generate_sub_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
-  return generate_arith_arr_i32(p, module, builder, foo);
-}
-
-LLVMValueRef generate_sub_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSub;
-  return generate_arith_i32_arr(p, module, builder, foo);
-}
-
-LLVMValueRef generate_mul_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildMul;
-  return generate_arith_arr_i32(p, module, builder, foo);
-}
-
-LLVMValueRef generate_div_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSDiv;
-  return generate_arith_arr_i32(p, module, builder, foo);
-}
-
-LLVMValueRef generate_div_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMValueRef (*foo)(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *) = LLVMBuildSDiv;
-  return generate_arith_i32_arr(p, module, builder, foo);
-}
-
-LLVMValueRef generate_move_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMTypeRef pointer_type = LLVMPointerType(LLVMInt32Type(), 0);
-  return generate_move_arr(p, pointer_type, module, builder);
-}
-
-LLVMValueRef generate_move_i1_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMTypeRef pointer_type = LLVMPointerType(LLVMInt1Type(), 0);
-  return generate_move_arr(p, pointer_type, module, builder);
-}
-
 LLVMValueRef generate_arith_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
                                     LLVMValueRef (*cmp)
                                     (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *)) {

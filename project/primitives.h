@@ -36,19 +36,6 @@ LLVMValueRef get_primitive_result_bool(LLVMModuleRef module,
 
 LLVMValueRef get_primitive(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMValueRef generate_add_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_sub_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef generate_add_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_sub_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_sub_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_mul_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_div_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_div_arr_i32(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef generate_move_i32_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef generate_move_i1_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder);
-
 LLVMValueRef generate_arith_arr_arr(enum primitive p, LLVMModuleRef module, LLVMBuilderRef builder,
                                     LLVMValueRef (*)
                                     (LLVMBuilderRef, LLVMValueRef, LLVMValueRef, const char *));
