@@ -74,7 +74,7 @@ struct expr* const_array(struct queue *queue) {
 
 struct queue* make_queue(struct expr *first) {
   if (first->type != LITERAL && first->type != BOOL_LIT) {
-    // TODO: error error error!
+    printf("Error: wrong type in array constant.\n");
     return 0;
   }
   struct queue *q = malloc(sizeof(struct queue));
@@ -87,8 +87,8 @@ struct queue* make_queue(struct expr *first) {
 struct queue* enqueue(struct queue *queue, struct expr *elem) {
   if ((elem->type == LITERAL && queue->type != INTEGER)
       || (elem->type == BOOL_LIT && queue->type != BOOLEAN)) {
-    // TODO: error error error!
-    return 0;
+    printf("Error: wrong type in array constant.\n");
+    return queue;
   }
   struct queue_element *next_el = encapsulate(elem);
   ++(queue->length);
@@ -493,7 +493,8 @@ int valid_stmt(struct stmt *stmt) {
   }
 }
 
-LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module,
+                          LLVMBuilderRef builder, int *error_status) {
   switch (expr->type) {
   case BOOL_LIT:
     return LLVMConstInt(LLVMInt1Type(), expr->value, 0);
@@ -518,7 +519,7 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
 
   case ELEM: {
     LLVMValueRef index[] = { LLVMConstInt(LLVMInt32Type(), 0, 0),
-                             codegen_expr(expr->elem.index, module, builder) };
+                             codegen_expr(expr->elem.index, module, builder, error_status) };
     LLVMValueRef ptr = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, expr->elem.id),
                                             index, 2, "ptrtmp");
     return LLVMBuildLoad(builder, ptr, "loadtmp");
@@ -527,8 +528,8 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
   case BIN_OP: {
     enum value_type type_lhs = check_types(expr->binop.lhs);
     enum value_type type_rhs = check_types(expr->binop.rhs);
-    LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder);
-    LLVMValueRef rhs = codegen_expr(expr->binop.rhs, module, builder);
+    LLVMValueRef lhs = codegen_expr(expr->binop.lhs, module, builder, error_status);
+    LLVMValueRef rhs = codegen_expr(expr->binop.rhs, module, builder, error_status);
 
     if (type_lhs == INTEGER && type_lhs == type_rhs) {
       switch (expr->binop.op) {
@@ -549,7 +550,8 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
       unsigned size_lhs = get_array_size(LLVMTypeOf(lhs));
       unsigned size_rhs = get_array_size(LLVMTypeOf(rhs));
       if (size_lhs != size_rhs) {
-        // TODO: ERROR ERROR
+        printf("Error: operation on arrays of dirrefent sizes\n");
+        *error_status = 1;
         return NULL;
       }
       LLVMValueRef lhs_ptr = LLVMBuildStructGEP(builder, lhs, 0, "ptr");
@@ -656,21 +658,23 @@ LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRe
   return NULL;
 }
 
-void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builder) {
+void codegen_stmt(struct stmt *stmt, LLVMModuleRef module,
+                  LLVMBuilderRef builder, int *error_status) {
   switch (stmt->type) {
   case STMT_SEQ: {
-    codegen_stmt(stmt->seq.fst, module, builder);
-    codegen_stmt(stmt->seq.snd, module, builder);
+    codegen_stmt(stmt->seq.fst, module, builder, error_status);
+    codegen_stmt(stmt->seq.snd, module, builder, error_status);
     break;
   }
 
   case STMT_ASSIGN: {
     LLVMValueRef lhs;
-    LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder);
+    LLVMValueRef rhs = codegen_expr(stmt->assign.rhs, module, builder, error_status);
     switch (stmt->assign.kind) {
     case A_ELEM: {
       LLVMValueRef index[] = { LLVMConstInt(LLVMInt32Type(), 0, 0),
-                               codegen_expr(stmt->assign.lhs->elem.index, module, builder) };
+                               codegen_expr(stmt->assign.lhs->elem.index, module,
+                                            builder, error_status) };
       lhs = LLVMBuildInBoundsGEP(builder, vector_get(&global_types, stmt->assign.lhs->elem.id),
                                  index, 2, "ref");
       LLVMBuildStore(builder, rhs, lhs);
@@ -686,8 +690,9 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
       unsigned size_lhs = get_array_size(LLVMTypeOf(lhs));
       unsigned size_rhs = get_array_size(LLVMTypeOf(rhs));
       if (size_lhs != size_rhs) {
-        // TODO: ERROR!
-        break;
+        printf("Error: operation on arrays of dirrefent sizes");
+        *error_status = 1;
+        return;
       }
 
       // retrieve primitive to call
@@ -700,7 +705,6 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
         func = get_primitive(COPY_I1_ARR, module, builder);
         break;
       default:
-        // TODO: ERROR
         func = NULL;
         return;
       }
@@ -725,19 +729,22 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     switch (arg_type) {
     case INTEGER: {
       print_fn = LLVMGetNamedFunction(module, "print_i32");
-      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args[0] = codegen_expr(stmt->print.expr, module, builder, error_status);
       args_num = 1;
       break;
     }
     case BOOLEAN: {
       print_fn = LLVMGetNamedFunction(module, "print_i1");
-      args[0] = codegen_expr(stmt->print.expr, module, builder);
+      args[0] = codegen_expr(stmt->print.expr, module, builder, error_status);
       args_num = 1;
       break;
     }
     case INT_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i32_arr");
-      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
+      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder, error_status);
+      if (!arr) {
+        return;
+      }
       args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
       args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;
@@ -745,7 +752,10 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     }
     case BOOL_ARRAY: {
       print_fn = LLVMGetNamedFunction(module, "print_i1_arr");
-      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder);
+      LLVMValueRef arr = codegen_expr(stmt->print.expr, module, builder, error_status);
+      if (!arr) {
+        return;
+      }
       args[0] = LLVMBuildStructGEP(builder, arr, 0, "");
       args[1] = LLVMConstInt(LLVMInt32Type() , get_array_size(LLVMTypeOf(arr)), 0);
       args_num = 2;
@@ -767,11 +777,11 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     LLVMBuildBr(builder, cond_bb);
 
     LLVMPositionBuilderAtEnd(builder, cond_bb);
-    LLVMValueRef cond = codegen_expr(stmt->while_.cond, module, builder);
+    LLVMValueRef cond = codegen_expr(stmt->while_.cond, module, builder, error_status);
     LLVMBuildCondBr(builder, cond, body_bb, cont_bb);
 
     LLVMPositionBuilderAtEnd(builder, body_bb);
-    codegen_stmt(stmt->while_.body, module, builder);
+    codegen_stmt(stmt->while_.body, module, builder, error_status);
     LLVMBuildBr(builder, cond_bb);
 
     LLVMPositionBuilderAtEnd(builder, cont_bb);
@@ -785,20 +795,17 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     unsigned size = LLVMGetArrayLength(array_type);
 
     LLVMValueRef element = vector_get(&global_types, stmt->for_.id);
-    LLVMValueRef old_val = LLVMBuildLoad(builder, element, "old_value");
 
     for (unsigned i = 0; i < size; ++i) {
       LLVMValueRef ptr = LLVMBuildStructGEP(builder, array, i, "ptr");
-      LLVMValueRef val = LLVMBuildLoad(builder, ptr, "val");
+      LLVMValueRef val = LLVMBuildLoad(builder, ptr, "x");
       LLVMBuildStore(builder, val, element);
 
-      codegen_stmt(stmt->for_.body, module, builder);
+      codegen_stmt(stmt->for_.body, module, builder, error_status);
 
       LLVMValueRef new_val = LLVMBuildLoad(builder, element, "new_x");
       LLVMBuildStore(builder, new_val, ptr);
     }
-
-    LLVMBuildStore(builder, old_val, element);
 
     break;
   }
@@ -809,16 +816,16 @@ void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builde
     LLVMBasicBlockRef else_bb = LLVMAppendBasicBlock(func, "else");
     LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(func, "cont");
 
-    LLVMValueRef cond = codegen_expr(stmt->ifelse.cond, module, builder);
+    LLVMValueRef cond = codegen_expr(stmt->ifelse.cond, module, builder, error_status);
     LLVMBuildCondBr(builder, cond, body_bb, else_bb);
 
     LLVMPositionBuilderAtEnd(builder, body_bb);
-    codegen_stmt(stmt->ifelse.if_body, module, builder);
+    codegen_stmt(stmt->ifelse.if_body, module, builder, error_status);
     LLVMBuildBr(builder, cont_bb);
 
     LLVMPositionBuilderAtEnd(builder, else_bb);
     if (stmt->ifelse.else_body) {
-      codegen_stmt(stmt->ifelse.else_body, module, builder);
+      codegen_stmt(stmt->ifelse.else_body, module, builder, error_status);
     }
     LLVMBuildBr(builder, cont_bb);
 

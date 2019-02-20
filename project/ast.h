@@ -133,7 +133,6 @@ struct stmt {
 
 struct stmt* make_seq(struct stmt *fst, struct stmt *snd);
 struct stmt* make_assign(struct expr *lhs, struct expr *rhs);
-struct stmt* make_assign_array_elem(size_t id, int index, struct expr *e);
 struct stmt* make_while(struct expr *e, struct stmt *body);
 struct stmt* make_for(size_t id, size_t collection, struct stmt *body);
 struct stmt* make_ifelse(struct expr *e, struct stmt *if_body, struct stmt *else_body);
@@ -143,8 +142,8 @@ void free_stmt(struct stmt *stmt);
 void print_stmt(struct stmt *stmt, int indent);
 int valid_stmt(struct stmt *stmt);
 
-LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRef builder);
-void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef codegen_expr(struct expr *expr, LLVMModuleRef module, LLVMBuilderRef builder, int *error_status);
+void codegen_stmt(struct stmt *stmt, LLVMModuleRef module, LLVMBuilderRef builder, int *error_status);
 
 struct decl_type {
   enum value_type type;
